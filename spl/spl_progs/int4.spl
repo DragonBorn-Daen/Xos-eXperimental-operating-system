@@ -1,0 +1,80 @@
+alias physp S0;
+alias syscallno S1;
+alias argument1 S2;	  //argument1 =word to write
+alias argument2  S7;	//argument2=file descriptor
+alias i S3;
+alias fatindex S4;
+alias sysindex S5;
+alias j S6;
+alias pid S8;
+alias lseek S9;
+alias basic_block S11; 
+alias data_block S10 ;
+
+physp=([PTBR+2*(SP/512)]*512)+SP%512;
+syscallno=[physp-1];
+argument1=[physp-3];
+argument2=[physp-4];
+
+if syscallno==5 then
+		//print("yes");
+	if argument2<0 || argument2>7 then
+	 [physp-2]=-1;
+	 ireturn;
+	endif;
+
+	pid=(PTBR-1024)/8;
+	if [READY_LIST+32*pid+15+2*argument2]==-1 then
+	 [physp-2]=-1;
+	 ireturn;
+	endif;
+
+	sysindex=[READY_LIST+32*pid+15+2*argument2];
+	lseek=[READY_LIST+32*pid+15+2*argument2+1];
+
+	fatindex=[FILE_TABLE+2*sysindex];
+	basic_block=[FAT+8*fatindex+2];
+	load(1,basic_block);
+	
+	i=lseek/512;
+	if i==256 then
+	[physp-2]=-1;
+	ireturn;
+	endif;	
+	
+	if [512+i]==-1 then
+	
+	j=0;
+	while j<448 do
+	if [DISK_LIST+j]==0 then
+	data_block=j;
+	[DISK_LIST+j]=1;
+	store(6,20);
+	[512+i]=data_block;
+	store(1,basic_block);
+	[FAT+8*fatindex+1]=[FAT+8*fatindex+1]+512;
+	store(5,19);
+	break;
+	endif;
+	j=j+1;
+	endwhile; 
+	
+	if j==448 then
+	[physp-2]=-1;
+	ireturn;
+	endif;	
+	
+	else
+	data_block=[512+i];
+	endif;
+
+	load(1,data_block);
+	j=lseek%512;
+	[512+j]=argument1;
+	store(1,data_block);
+	[READY_LIST+32*pid+15+argument2*2+1]=[READY_LIST+32*pid+15+argument2*2+1]+1;
+	[physp-2]=0;
+	ireturn;
+	
+
+endif;

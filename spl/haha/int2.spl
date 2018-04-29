@@ -1,0 +1,116 @@
+alias physicalsp S0;
+physicalsp=([PTBR+6]*512)+ SP%512;
+alias syscall S1;
+syscall= [physicalsp-1];
+S2=[physicalsp-2]; //R0 return value
+S3=[physicalsp-3]; //R1
+alias k S6;
+
+if ( syscall == 2) then
+  alias i S4; 
+  breakpoint;
+  alias j S7;
+  
+  i=0;	
+  //step 
+  //checking if a given file alraedy exists in the FAT
+  while(i<64) do
+    if([FAT+8*i]==S3) then			
+      break;
+    endif;
+    i=i+1;
+  endwhile; 
+  //i is the fat index if found
+  //if the entry is not found -1 is returned
+  if(i==64) then
+  	[physicalsp-2]=-1;
+    ireturn;
+  endif;
+  k=-1;
+
+  //step2
+  //checking if the file is already open
+  j=0;
+  while(j<64) do
+    if([FILE_TABLE+2*j]==i) then
+      k=j;         //file table index is stored in k, i.e its already opened
+      break;
+    endif; 
+  j=j+1;
+  endwhile;
+  if(j==64) then
+    k=-1;
+  endif;  
+  j=0;
+  //if FAT index is not found in file table then k=-1
+  if(k==-1) then
+    while(j<64) do
+      if([FILE_TABLE+2*j]==-1) then  //searching for the first free entry in file table and storing it in k, its not already open
+        k=j;
+        break;
+      endif;
+    j=j+1;   
+    endwhile;
+    if(j==64) then
+      [physicalsp-2]=-1;
+      ireturn;
+    endif;
+  endif;       
+  
+
+  //step4
+
+  alias c S5;
+  c=0;
+  alias currentPCB S10;
+  currentPCB=READY_LIST+4*(PTBR-1024);
+  while(c<16) do
+     if([currentPCB+15+c]==-1) then   //searching for free entry in per process file table
+       break;
+     endif;
+     c=c+2;
+  endwhile;
+  if(c==16) then //if there are no free entries in per process file table
+    [physicalsp-2]=-1;
+    ireturn;
+  endif;
+  [currentPCB+15+c]=k; //storing file table index in the first free entry of per process file table
+  [currentPCB+15+c+1]=0;
+  [FILE_TABLE+ 2*k]=i;
+  [FILE_TABLE+ 2*k+1]= [FILE_TABLE+ 2*k+1]+1;   //increasing the file open count in system wide open file table   
+  breakpoint;
+  [physicalsp-2]=c/2;    //c/2 is the indexing of per process file table,,   Index of open instance in Per-Process Open File table 
+  ireturn;
+endif;  
+
+if ( syscall == 3) then
+  alias i S4; 
+  breakpoint;
+  alias j S7;
+  
+  i=0;	
+  //step 1
+  if(S3<=-1||S3>7) then  //checking if the filedescriptor is valid
+    [physicalsp-2]=-1; 
+    ireturn;
+  endif;
+   alias currentPCB S10;
+  currentPCB=READY_LIST+4*(PTBR-1024);
+
+  if([currentPCB+15+2*S3]==-1) then   //file must be open if we want to close. we cannot close an closed file
+    [physicalsp-2]=-1; 
+    ireturn;
+  endif;
+  alias k S8;
+  k=[currentPCB+15+2*S3];        //storing the index of file table in k
+  alias l S9;
+  l=[FILE_TABLE+2*k] ;            //storing the index of fat from file table
+  [FILE_TABLE+2*k+1]=[FILE_TABLE+2*k+1]-1;    //reducing open file count in system wide open file table
+  if([FILE_TABLE+2*k+1]==0) then              //if the open file count is 0
+   [FILE_TABLE+2*k]=-1;                      //setting index of fat as invalid as there are 0 open instances of the file
+  endif ;
+  [currentPCB+15+2*S3]=-1;                      //setting per process file table entry as invalid
+  [currentPCB+15+2*S3+1]=-1;
+  [physicalsp-2]=0;
+  ireturn;
+endif;  

@@ -1,0 +1,129 @@
+alias physp S0;
+alias syscallno S1;
+alias argument S2;
+alias i S3;
+alias fatindex S4;
+alias sysindex S5;
+alias j S6;
+alias pid S7;
+alias perprocessindex S8;
+
+physp=([PTBR+2*(SP/512)]*512)+SP%512;
+syscallno=[physp-1];
+argument=[physp-3];
+
+// code for open
+
+if syscallno==2 then
+
+// step1
+	i=0;
+	while(i<64) do                        //checking if the filename exists in the FAT
+	if  [FAT+i*8]==argument then
+		fatindex=i;
+                break ;
+        endif;
+        i=i+1 ;
+        endwhile ;
+
+	if i==64 then               //if filename doesnt exists in FAT return -1
+	   [physp-2]=-1;
+           ireturn ;
+        endif ;
+
+//step2
+	i=0;
+        while(i<64) do                         //looking if the file is already open or not through system wide open file table
+        if  [FILE_TABLE+2*i]==fatindex then
+	    sysindex=i;
+	    break;
+        endif;
+	i=i+1;
+	endwhile ;
+
+	if i==64 then                     //if not open create an entry for the fatindex of the file
+        j=0 ;
+	while(j<64) do
+	if [FILE_TABLE+2*j]==-1  then
+	 // [FILE_TABLE+2*j]=fatindex ;
+	  sysindex=j;
+ 	break;
+	endif ;
+	j=j+1;
+	endwhile ;
+	endif;
+
+	if j==64 then                   //if no entry for the filename in system wide open file table then return -1
+	[physp-2]=-1;
+	ireturn ;
+	endif ;
+//step3
+	pid=(PTBR-1024)/8 ;
+	i=0;                             //finding processid
+	
+	while i<8 do
+	if [READY_LIST+15+pid*32+2*i]==-1 then
+	 perprocessindex=i;
+	 [READY_LIST+pid*32+15+2*i]=sysindex;               //finding a free entry in perprocess file table
+	 [READY_LIST+pid*32+15+2*i+1]=0;
+	break;
+	endif;	
+	i=i+1;
+	endwhile ;
+	
+	if i==8 then                                      //if no entry then return -1
+	  [physp-2]=-1 ;
+	  ireturn ;
+	endif ;
+
+       	[FILE_TABLE+2*sysindex]=fatindex ;                             //storing fatindex in system wide open filetable entry
+	[FILE_TABLE+2*sysindex+1]=[FILE_TABLE+2*sysindex+1]+1 ;        // incrementing tne count of the entry
+
+	[physp-2]=perprocessindex ;
+	ireturn ;
+
+endif;
+
+//code for close
+
+if syscallno==3 then
+	if argument<0 then
+	[physp-2]=-1;
+	ireturn;
+	endif;
+
+	if argument>7 then
+	[physp-2]=-1;
+	ireturn;
+	endif;
+	
+	pid=(PTBR-1024)/8;
+	if [READY_LIST+pid*32+15+argument*2]==-1 then
+	[physp-2]=-1;
+	ireturn;
+	endif;
+
+	sysindex=[READY_LIST+pid*32+15+argument*2];
+	[FILE_TABLE+2*sysindex+1]=[FILE_TABLE+2*sysindex+1]-1;
+
+	if [FILE_TABLE+2*sysindex+1]==0 then
+	[FILE_TABLE+2*sysindex]=-1;
+	endif;
+
+	[READY_LIST+pid*32+15+argument*2]=-1;	//
+
+	[physp-2]=0;
+	ireturn;
+
+endif;
+	
+	
+	
+	
+	
+	
+	   
+	
+             
+              
+                  

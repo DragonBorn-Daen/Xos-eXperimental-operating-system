@@ -1,0 +1,124 @@
+alias physicalsp S0;
+physicalsp=([PTBR+6]*512)+ SP%512;
+alias syscall S1;
+syscall= [physicalsp-1];
+S2=[physicalsp-2]; //R0 return value
+S3=[physicalsp-3]; //R1
+alias h S12;
+alias db S14;
+
+if ( syscall == 1) then
+  alias i S4; 
+  breakpoint;
+  i=0;	
+  
+  while(i<64) do
+    if([FAT+8*i]==S3) then	  //searching if already the file is created, searching in the fat		
+      [physicalsp-2]=0;                           //if its already created returning 0
+      ireturn;
+    endif;
+    i=i+1;
+  endwhile; 
+  i=24;
+  while(i<448) do
+    if([3072+i]==0) then                           //searching for free blocks in disk free list
+      break;
+    endif;
+    i=i+1;  
+  endwhile;
+  if(i==448) then
+    [physicalsp-2]=-1;                          //if disk free list is full
+    ireturn;
+  endif;
+  alias j S5;
+  j=0;
+  while(j<64) do
+    if([FAT+2+8*j]==-1) then                  //searching for first free entry of FAT
+      [FAT+8*j]=S3;
+      [FAT+8*j+1]=0; 
+      [FAT+8*j+2]=i; 
+      break;
+    endif;
+    j=j+1;
+  endwhile;
+  if(j==64) then                              //there cannot be more than 64 files
+   
+   [physicalsp-2]=-1;
+   ireturn;
+  endif; 
+  load(1,i);                                 //using page 1 of memory as scratch pad
+  j=0;
+  while(j<256) do
+    [512+j]=-1;                               //setting up data blocks to -1
+    j=j+1;
+  endwhile;
+  store(1,i);                                //storing back the basic block              
+  [DISK_LIST+i]=1;                           //making entry in df to 1
+  store(5,19);
+  store(6,20);
+  
+  [physicalsp-2]=0;                               //returning success
+  ireturn;    	  	
+endif;
+
+if ( syscall == 4) then
+  alias i S4;
+  alias j S5;
+  breakpoint;
+  i=0;	
+  
+  while(i<64) do
+    if([FAT+8*i]==S3) then
+      break;
+    endif;
+    i=i+1;
+  endwhile;
+  if(i==64) then			
+      [physicalsp-2]=-1;
+      ireturn;
+  endif; 
+  j=0; h=0;
+  while(j<64) do
+    if([FILE_TABLE+2*j]==i) then
+      [physicalsp-2]=-1; 
+      ireturn;
+    endif;
+    j=j+1;
+  endwhile;
+  load(1,[FAT+8*i+2]);
+  
+  j=0;
+  
+  while(j<256) do
+    if([512+j]!=-1) then
+      db=[512+j];
+      load(1,db);
+      [3072+db]=0;
+      h=0;
+      while(h<512) do
+        [512+h]="";
+        h=h+1;
+      endwhile;
+      store(1,db);
+      load(1,[FAT+8*i+2]);       
+    endif;     
+    j=j+1; 
+  endwhile;
+  j=0;
+  while(j<256) do
+    [512+j]="";
+    j=j+1;
+  endwhile;
+  store(1,[FAT+8*i+2]);
+  [3072+[FAT+8*i+2]]=0; 
+  [FAT+8*i]=-1;
+  [FAT+8*i+1]=0;
+  [FAT+8*i+2]=-1;
+  store(5,19);
+  store(6,20);
+  
+  [physicalsp-2]=0;
+  ireturn;    	  	
+endif;
+
+

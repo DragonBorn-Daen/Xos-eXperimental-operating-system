@@ -1,0 +1,120 @@
+alias physicalsp S0;
+physicalsp=[PTBR+6]*512+(SP%512);
+
+alias syscallno S1;
+syscallno=[physicalsp-1];
+
+if(syscallno==8) then	
+	alias i S2;
+	i=0;
+	//1 and 2 
+	while(i<32) do
+		if([READY_LIST+32*i+1]==0) then    //searching for pcb with state 0 
+			break;
+		endif;
+		i=i+1;
+	endwhile;
+	if(i==32) then
+		[physicalsp-2]=-1;
+		//print(19);
+		ireturn;
+	endif;
+	//3
+	alias childpid S3;
+	childpid=i;
+	[READY_LIST+32*i]=i;  //setting child pid
+
+	alias cnt S4;
+	cnt=0;
+
+	while(i<=3) do
+		if([PTBR+2*i]!=-1) then       //counting no.of valid pages in page table of parent
+			cnt=cnt+1;
+		endif;
+		i=i+1;
+	endwhile;
+
+	alias freepmem S5;
+	freepmem=0;
+	i=0;
+	while(i<=63) do
+		if([MEM_LIST+i]==0) then
+			freepmem=freepmem+1;             //counting no of free pages in memory freelist
+		endif;
+		i=i+1;
+	endwhile;
+
+	if(freepmem<cnt) then
+		[physicalsp-2]=-1; 
+		//print(49);                         //returning -1 if valid pages > free pages in memory
+		ireturn;
+	endif;
+
+	alias childptbr S6;
+	childptbr=1024+8*childpid;
+
+	i=0;
+	while(i<=3) do
+		if([PTBR+2*i]!=-1) then
+			freepmem=0;
+			while(freepmem<64) do
+				if([MEM_LIST+freepmem]==0) then
+					break;
+				endif;
+				freepmem=freepmem+1;
+			endwhile;
+			[MEM_LIST+freepmem]=1;
+			cnt=0;                        //changing memory free list entries and copying word by word in pages
+
+			while(cnt<512) do
+				[freepmem*512+cnt]=[[PTBR+2*i]*512+cnt];
+				cnt=cnt+1;
+			endwhile;
+			
+			[childptbr+2*i]=freepmem;
+			[childptbr+2*i+1]=[PTBR+2*i+1];           //setting up page table
+		else
+			[childptbr+2*i]=[PTBR+2*i];
+			[childptbr+2*i+1]=[PTBR+2*i+1];
+		endif;
+		i=i+1;
+	endwhile;
+	[READY_LIST+32*childpid+5]=childptbr;
+	[READY_LIST+32*childpid+4]=[physicalsp];
+	[READY_LIST+32*childpid+3]=SP-1;
+	[READY_LIST+32*childpid+2]=BP;
+	[READY_LIST+32*childpid+6]=PTLR;
+	[READY_LIST+32*childpid+7]=R0;
+	[READY_LIST+32*childpid+8]=R1;
+	[READY_LIST+32*childpid+9]=R2;
+	[READY_LIST+32*childpid+10]=R3;
+	[READY_LIST+32*childpid+11]=R4;
+	[READY_LIST+32*childpid+12]=R5;
+	[READY_LIST+32*childpid+13]=R6;
+	[READY_LIST+32*childpid+14]=R7;
+	
+	alias parentpid S7;
+	parentpid=(PTBR-1024)/8;
+	[READY_LIST+32*childpid+31]=parentpid;
+	i=0;
+	while(i<=7) do
+		[READY_LIST+32*childpid+15+2*i]=[READY_LIST+32*parentpid+15+2*i];
+		[READY_LIST+32*childpid+15+2*i+1]=[READY_LIST+32*parentpid+15+2*i+1];
+		if([READY_LIST+32*parentpid+15+2*i]!=-1) then
+			[FILE_TABLE+2*[READY_LIST+32*parentpid+15+2*i]+1]=[FILE_TABLE+2*[READY_LIST+32*parentpid+15+2*i]+1]+1;
+		endif;
+		i=i+1;
+	endwhile;
+
+	[READY_LIST+32*childpid+1]=1;
+	[physicalsp-2]=childpid;
+	alias childsp S8;
+	childsp=SP-1;
+	alias childphysp S9;
+	childphysp=[childptbr+6]*512+(childsp%512);
+	[childphysp-1]=-2;
+	
+	ireturn;	
+	
+endif;
+

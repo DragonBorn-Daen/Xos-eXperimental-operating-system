@@ -1,0 +1,79 @@
+alias cpid S2;
+
+if(PTBR<1300)then
+  cpid=(PTBR-1024)/8;  //calculating current pid
+else
+  cpid=32+((PTBR-1472)/8);
+endif;
+
+alias cpcb S3;
+if(cpid<32)then
+  cpcb=1536+(cpid*32);    //calculating current pcb start address
+else
+  cpcb=12800+((cpid-32)*32);
+endif;
+
+[cpcb+1]=1;				//ready state
+					
+[cpcb+3]=SP-1;			
+[cpcb+2]=BP;
+alias physicalsp S4;		
+physicalsp=([PTBR+2*(SP/512)]*512)+(SP%512); 		//calculating physical address of sp
+[cpcb+4]=[physicalsp];								//storing ip in pcb
+[cpcb+5]=PTBR;
+[cpcb+6]=PTLR;
+
+[cpcb+7]=R0;
+[cpcb+8]=R1;
+[cpcb+9]=R2;
+[cpcb+10]=R3;
+[cpcb+11]=R4;
+[cpcb+12]=R5;
+[cpcb+13]=R6;
+[cpcb+14]=R7;
+
+ ////////////////////////////////             new process
+ 
+alias newPCB S6;
+alias i S7;
+i=cpcb+32;
+
+newPCB=cpcb;
+											//round robin scheduling
+  while i!=cpcb do
+    if i==2560 then
+		    i=12800;
+    endif;
+    if(i==13056)then
+        i=1536;
+    endif;
+    if [i+1]==1 then
+        newPCB=i;
+        break;
+    endif;
+    i=i+32;
+     
+     
+  endwhile;
+  												// restoring all registers
+BP=[newPCB+2];
+SP=[newPCB+3];
+PTBR=[newPCB+5];
+PTLR=[newPCB+6];
+R0=[newPCB+7];
+R1=[newPCB+8];
+R2=[newPCB+9];
+R3=[newPCB+10];
+R4=[newPCB+11];
+R5=[newPCB+12];
+R6=[newPCB+13];
+R7=[newPCB+14];
+
+SP=SP+1;
+alias newphysicalSP S5;
+newphysicalSP=([PTBR+2*(SP/512)]*512)+(SP%512);				//to allocate free block for storing ip
+[newphysicalSP]=[newPCB+4];								//set ip value in top of stack
+[newPCB+1]=2;											//set new process in running state
+
+ireturn;
+

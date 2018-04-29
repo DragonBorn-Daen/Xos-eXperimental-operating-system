@@ -1,0 +1,169 @@
+alias physicalsp S0;
+alias syscallno S1;
+alias i S2;
+alias j S3;
+alias pid S4;
+alias sysindex S5;
+alias next S6;
+alias nextpcb S7;
+alias mempage S8;
+alias valid S9;
+alias waitingpid S10;
+alias flag S11;
+
+flag=0;
+physicalsp=([PTBR+2*(SP/512)]*512)+SP%512;
+syscallno=[physicalsp-1];
+
+if syscallno==10 then
+
+	if(PTBR < 1300)then
+		pid=(PTBR-1024)/8;
+	else
+		pid=32+((PTBR-1472)/8);
+	endif;	
+
+	i=0;
+	while i<32 do
+		if [READY_LIST+32*i+1]==100+pid then
+			[READY_LIST+32*i+1]=1;
+		endif;
+	i=i+1;
+	endwhile;
+
+	while i<40 do
+		if [12800+(32*(i-32))+1]==100+pid then
+			[12800+(32*(i-32))+1]=1;
+		endif;
+	i=i+1;
+	endwhile;
+
+	i=0;
+	while i<32 do
+		if [READY_LIST+32*i+1]==1 then
+			break;
+		endif;
+	i=i+1;
+	endwhile;
+
+	while i<40 do
+		if [12800+(32*(i-32))+1]==1 then
+			break;
+		endif;
+	i=i+1;
+	endwhile;
+
+	if i==40 then
+		halt;
+	endif;
+
+	i=0;
+	if(pid<32)then
+		while i<8 do
+			sysindex=[READY_LIST+pid*32+15+2*i];
+			if sysindex!=-1 then
+				[READY_LIST+pid*32+15+2*i]=-1;
+				[READY_LIST+pid*32+16+2*i]=0;
+				[FILE_TABLE+2*sysindex+1]=[FILE_TABLE+2*sysindex+1]-1;
+				if [FILE_TABLE+2*sysindex+1]==0 then
+	    				[FILE_TABLE+2*sysindex]=-1;
+				endif;
+			endif;
+		i=i+1;
+		endwhile;
+	else	
+		while i<8 do
+			sysindex=[12800+((pid-32)*32)+15+2*i];
+			if sysindex!=-1 then
+				[12800+((pid-32)*32)+15+2*i]=-1;
+				[12800+((pid-32)*32)+16+2*i]=0;
+				[FILE_TABLE+2*sysindex+1]=[FILE_TABLE+2*sysindex+1]-1;
+				if [FILE_TABLE+2*sysindex+1]==0 then
+	    				[FILE_TABLE+2*sysindex]=-1;
+				endif;
+			endif;
+		i=i+1;
+		endwhile;	
+	endif;
+	
+	if(pid<32)then		
+		[READY_LIST+32*pid+1]=0;
+	else
+		[12800+(32*(pid-32))+1]=0;
+	endif;
+		
+	i=0;
+	while i<4 do
+		if [PTBR+2*i]!=-1 then
+			mempage=[PTBR+2*i];
+			valid=[PTBR+2*i+1];
+			if valid=="01" || valid=="11" then
+				[MEM_LIST+mempage]=[MEM_LIST+mempage]-1;
+			endif;
+			if valid=="00" && mempage>=448 then
+				[DISK_LIST+mempage]=[DISK_LIST+mempage]-1;
+				store(6,20);
+			endif;
+		endif;
+		[PTBR+2*i]=-1;
+		[PTBR+2*i+1]="00";
+	i=i+1;
+	endwhile;
+
+	flag=1;
+
+
+endif;
+
+
+if flag==1 then 
+
+	if(PTBR < 1300)then
+		pid=(PTBR-1024)/8;
+	else
+		pid=32+((PTBR-1472)/8);
+	endif;	
+	i=pid+1;
+	while i!=pid do
+		if i==40 then
+			i=0;
+		endif;
+		if(i<32)then
+			if [READY_LIST+32*i+1]==1 then
+				next=i;
+				break;
+			endif;
+		else
+			if([12800+(32*(i-32))+1]==1)then
+				next=i;
+				break;
+			endif;
+		endif;		
+	i=i+1;
+	endwhile;
+	
+	if(next<32)then
+		nextpcb=READY_LIST+32*next;
+	else
+		nextpcb=12800 + ((next-32)*32);
+	endif;
+
+	[nextpcb+0]=next;
+	[nextpcb+1]=2;
+	BP=[nextpcb+2];
+	SP=[nextpcb+3];
+	PTBR=[nextpcb+5];
+	PTLR=[nextpcb+6];
+	R0=[nextpcb+7];
+	R1=[nextpcb+8];
+	R2=[nextpcb+9];
+	R3=[nextpcb+10];
+	R4=[nextpcb+11];
+	R5=[nextpcb+12];
+	R6=[nextpcb+13];
+	R7=[nextpcb+14];
+
+	SP=SP+1;
+	[([PTBR+2*(SP/512)]*512)+(SP%512)]=[nextpcb+4];
+	ireturn ;
+endif;

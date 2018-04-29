@@ -1,0 +1,145 @@
+alias physicalSP S0;
+physicalSP= ([PTBR + 2*(SP/512)]*512) + (SP%512);
+
+alias sysCallNo S1;
+sysCallNo=[physicalSP - 1];
+
+if(sysCallNo == 8) then
+	alias pcbindex S2;
+	alias i S3;
+	alias flag2 S5;
+	alias childptbr S6;
+	alias j S7;
+	alias vp_address S8;
+	alias victim_page S9;
+	alias parentpage S10;
+	alias childpcb S11;
+	alias parentpcb S12;
+	alias parentpid S13;
+	alias childphysicalSP S14;
+	
+	if(PTBR<1300)then
+		parentpid = (PTBR - 1024) / 8;
+	else
+		parentpid = 32 + ((PTBR - 1472)/8);
+	endif;
+
+	if(parentpid<32)then
+		parentpcb = READY_LIST + 32 * parentpid;
+	else
+		parentpcb = 12800 + (32 * (parentpid-32));
+	endif;
+	
+	i=0;
+	while(i<32) do					//find a free pcb and get its index
+		if([READY_LIST + i*32 + 1] == 0) then
+			pcbindex = i;
+			break;
+		endif;
+		i=i+1;
+	endwhile;
+	
+	while(i<40) do					//find a free pcb and get its index
+		if([12800 + ((i-32)*32) + 1] == 0) then
+			pcbindex = i;
+			break;
+		endif;
+		i=i+1;
+	endwhile;
+	
+	if(i==40) then				//if no free pcb then failure
+		[physicalSP - 2]= -1;
+		ireturn;
+	endif;
+	
+	if(pcbindex<32)then
+		childpcb = READY_LIST + pcbindex*32;
+	else
+		childpcb = 12800 + ((pcbindex-32)*32);
+	endif;
+	
+	i=0;
+	i=0;
+	while(i<64) do
+		if([MEM_LIST +i] == 0) then
+			//count=count+1;
+			victim_page=i;
+			[MEM_LIST + i]=1;
+			break;
+		endif;
+		i=i+1;
+	endwhile;
+	
+
+		if i==64 then
+			[physicalSP-2]=-1;
+			ireturn;
+		endif;
+
+
+
+	if(pcbindex<32)then
+		[READY_LIST + pcbindex*32 ] = pcbindex; 	//set pid of child process
+		childptbr = 1024 + 8*pcbindex;
+	else
+		[12800 + ((pcbindex-32)*32)]=pcbindex;
+		childptbr = 1472 + (8*(pcbindex-32));
+	endif;
+	
+	i=0;				//copying pagetable
+	while(i<3) do
+		[childptbr + 2*i + 0] = [PTBR + 2*i + 0];
+		[childptbr + 2*i + 1] = [PTBR + 2*i + 1];
+		if (([PTBR + 2*i + 1] == "01" || [PTBR + 2*i + 1] == "11") && ([PTBR + 2*i] != -1) ) then
+			[MEM_LIST + [PTBR + 2*i + 0]] = [MEM_LIST + [PTBR + 2*i + 0]] + 1;
+		endif;	
+		if(([PTBR + 2*i + 1] == "00" || [PTBR + 2*i + 1] == "10") && ([PTBR + 2*i] >= 448) ) then
+			[DISK_LIST + [PTBR + 2*i] ] = [DISK_LIST + [PTBR + 2*i] ]  + 1;
+			store(6,20);
+		endif;
+		i=i+1;
+	endwhile;		
+		
+	parentpage = [PTBR + 6];
+	i=0;
+	while(i<512) do
+		[victim_page*512 + i] = [parentpage*512 + i];
+		i=i+1;
+	endwhile;
+	
+	[childptbr + 6] = victim_page;		//setting the child page table stack entries
+	[childptbr + 7] = "01";
+	[childpcb + 6] = PTLR;
+	[childpcb + 5] = childptbr;
+	[childpcb + 4] = [physicalSP];
+	[childpcb + 3] = SP - 1;
+	[childpcb + 2] = BP ;
+	[childpcb + 1] = 1 ;
+	[ childpcb + 7 ] = R0;
+	[ childpcb + 8 ] = R1;
+	[ childpcb + 9 ] = R2;
+	[ childpcb + 10 ] = R3;
+	[ childpcb + 11 ] = R4;
+	[ childpcb + 12 ] = R5;
+	[ childpcb + 13 ] = R6;
+	[ childpcb + 14 ] = R7;
+	i=15;
+	while(i<31) do
+		[childpcb + i] = [parentpcb +i];
+		i=i+1;
+	endwhile;
+
+	[childpcb + 31 ] = parentpid;
+	i=15;
+	while(i<31) do					    
+		if([childpcb + i] !=-1) then			
+			[FILE_TABLE + 2*[childpcb + i] + 1 ]=[FILE_TABLE + 2*[childpcb + i] +1 ] + 1; 
+		endif;
+		i=i+2;
+	endwhile;
+	[physicalSP - 2] = pcbindex;
+	childphysicalSP= ([childptbr + 2*((SP-1)/512)]*512) + ((SP-1)%512);
+	[childphysicalSP -1] = -2;
+	ireturn;
+endif;
+	

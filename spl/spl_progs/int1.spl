@@ -1,0 +1,153 @@
+alias physp S0;
+alias syscallno S1;
+alias argument S2;
+alias i S3;
+alias fatindex S4;
+alias sysindex S5;
+alias j S6;
+alias pid S7;
+alias perprocessindex S8;
+alias basic_block S9; 
+alias data_block S10 ;
+
+physp=([PTBR+2*(SP/512)]*512)+SP%512;
+syscallno=[physp-1];
+argument=[physp-3];
+
+if syscallno==1 then
+	i=0;
+	while i<64 do
+	if [FAT+i*8]==argument then
+	[physp-2]=0;
+	ireturn;
+	endif;
+	i=i+1;
+	endwhile;
+
+	i=0;
+	while i<448 do
+	if [DISK_LIST+i]==0 then
+	basic_block=i;
+	break;
+	endif;
+	i=i+1;
+	endwhile;
+
+	if i==448 then
+	[physp-2]=-1;
+	ireturn;
+	endif;
+	
+	i=0;
+	while i<64 do
+	if [FAT+8*i]==-1 then
+	[FAT+8*i]=argument;
+	[FAT+8*i+1]=0;
+	[FAT+8*i+2]=basic_block;
+	[DISK_LIST+basic_block]=1;
+	break;
+	endif;
+	i=i+1;
+	endwhile;
+
+	if i==64 then
+	[physp-2]=-1;
+	ireturn;
+	endif;
+
+	load(1,basic_block);
+	i=0;
+	while i<512 do 
+	[512+i]=-1;
+	i=i+1;
+	endwhile ;
+	store(1,basic_block);
+
+	store(5,19);
+	store(6,20);
+	[physp-2]=0;
+
+        ireturn;
+
+endif;
+
+
+
+	
+if syscallno==4 then
+	i=0;
+	while i<64 do
+	if [FAT +8*i]==argument then
+	fatindex=i;				//checking whether file exists or not in FAT 
+	break;
+	endif;
+	i=i+1;
+	endwhile;
+
+	if i==64 then
+	[physp-2]=-1;
+	//print("h1");
+	ireturn;
+	endif;
+
+	i=0;
+	while i<64 do
+	if [FILE_TABLE+i*2]==fatindex then
+	[physp-2]=-1;
+	//print("h2");
+	ireturn;					//checking whether file is open or not in system wide open file table
+	endif;
+	i=i+1;
+	endwhile;
+
+// step 3
+	basic_block=[FAT+8*fatindex+2] ;
+	i=0 ;
+	                               //  print("1");
+	while 512+i<1024 do
+	load(1,basic_block) ;
+	
+	data_block=[512+i] ;
+		
+	if data_block==-1||data_block=="" then
+	i=i+1;
+	continue;
+	endif ;
+	                                 //  print("2");
+	load(1,data_block) ;
+	j=0;
+	                                 //  print("3") ;
+	while j<512 do
+	[512+j]="";
+	j=j+1;
+	endwhile ;
+	                                 // print("4");
+	store(1,data_block) ;
+	[DISK_LIST+data_block]=0 ;
+	
+	i=i+1 ;
+	endwhile ;
+	                                //   print("5");
+	load(1,basic_block) ;
+	i=0 ;
+
+	while i<512 do
+	[512+i]="" ;
+	i=i+1;
+	endwhile ;
+	                                  //  print("6");
+	store(1,basic_block);
+	[DISK_LIST+basic_block]=0;
+
+	[FAT+8*fatindex+0]=-1;
+	[FAT+8*fatindex+1]=0;
+	[FAT+8*fatindex+2]=-1;	
+	
+	store(5,19);
+	store(6,20);
+	                                   //	print("7") ;
+	[physp-2]=0 ;
+	//print("h3") ;
+	ireturn ;	
+
+endif;

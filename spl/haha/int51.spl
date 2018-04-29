@@ -1,0 +1,164 @@
+alias physicalsp S0;
+physicalsp=[PTBR+6]*512+(SP%512);		//CALCULATING PHYSICAL SP
+
+alias syscallno S1;
+syscallno=[physicalsp-1];			//NO argument FOR FORK. 
+
+if(syscallno==8) then	
+	alias i S2;
+	i=0;
+	//1 and 2 
+	while(i<32) do
+		if([READY_LIST+32*i+1]==0) then    //searching for pcb with state 0 
+			breakpoint;
+			break;
+		endif;
+		i=i+1;
+	endwhile;
+	if(i==32) then
+		[physicalsp-2]=-1;					//if not found there are 32 processes, so exit 
+		//print(19);
+		ireturn;
+	endif;
+	//3
+	alias childpid S3;
+	childpid=i;			//the free entry we found
+	[READY_LIST+32*i]=i;  //setting child pid
+
+
+	alias j S4;
+	j=0;
+	alias childptbr S6;
+	childptbr=1024+8*childpid;  //PAGE_TABLE+childpid*8;
+
+	i=0;
+	while(i<64) do
+		if([MEM_LIST+i]==0) then
+			[childptbr+6]=i;              //searching stack for child and setting a free memory page
+			[childptbr+7]="01";			//setting as unreferenced and valid(as it is in memory)
+			j=0;
+			while(j<512) do
+				[i*512+j]=[[PTBR+6]*512+j];				//copying stack page of parent to child stack
+				j=j+1;
+            endwhile;                
+            break;
+		endif;
+		i=i+1;
+	endwhile;
+	
+	alias victim_page S10;					//victim page is the page in memory we swap out and store in the disk
+    alias vp_address S11;
+    //alias flag1 S12;
+	alias flag2 S13;
+
+	if(i==64) then		   //if free page for stack is unavailable,some other page is swapped out to  disk to make space for this page.
+		//[physicalsp-2]=-1;
+		//ireturn;
+		//flag1=0;
+        flag2=0;
+        i=(PTBR-1024)/8;
+        i=i+1;
+        	while(flag2==0) do
+                j=0;
+                while(j<3) do
+                	if([PAGE_TABLE+8*i+2*j+1]=="01"&&[MEM_LIST+[PAGE_TABLE+8*i+2*j]]<=1)then  //replacing only the pages, which are not shared
+                    	victim_page=[PAGE_TABLE+8*i+2*j];		//finding a page which is unreferenced and valid,i.e residing in memory
+                        vp_address=PAGE_TABLE+8*i+2*j;			//that page in terms of PTBR+2*i
+                        flag2=1;								//ending the while loops on finding out the page to be swapped 
+                        break;
+                    endif;
+                    if([PAGE_TABLE+8*i+2*j+1]=="11")then
+                        [PAGE_TABLE+8*i+2*j+1]="01"; 
+                        //This gives the page which is accessed recently a second chance before getting replaced.			
+                    endif;
+                    j=j+1;
+                endwhile;
+
+                if(i==31)then
+            		i=0;
+              	else 										
+               		i=i+1;
+              	endif;
+            endwhile;
+             
+
+   		i=448;
+   		while(i<512) do
+
+     		if([DISK_LIST+i]==0)then
+         		[DISK_LIST+i]=[DISK_LIST+i]+1;
+         		store(6,20);						//free page found in disk to be swapped, we increment the df entry by 1
+         		store([vp_address],i);				// as we store the memory page which we swap out, btw we also commit back df	
+         		[vp_address]=i;						//setting the disk page entry in page table (>447) for victim page
+         		[vp_address+1]="00";				//set it as unreferenced and invalid(sneakinig into victim ptbr)
+         		break;
+      		endif;
+     		i=i+1;
+   		endwhile;
+   		
+   		if(i==512)then
+      		[physicalsp-2]=-1;						//swap area is full we have no space to store the swapped out memory page
+      		print("swap area full");				
+         	ireturn;								
+		endif;
+		[childptbr+6]=victim_page;					//now we have cleared out space for our stack,setting ptbr
+   		[childptbr+7]="01";						
+
+   	endif;	
+
+	i=0;	
+    while(i<3) do
+    	[childptbr+2*i]=[PTBR+2*i];					//copying child ptbr from parent ptbr except stack		
+        [childptbr+2*i+1]=[PTBR+2*i+1];
+
+      	if([childptbr+2*i+1]%10==1)then
+        	[MEM_LIST+[childptbr+2*i]]=[MEM_LIST+[childptbr+2*i]]+1;	//if page in ptbr in mem, increase mem list entry by 1
+        endif;
+
+        if([childptbr+2*i+1]%10==0&&[childptbr+2*i]>=448)then				
+        	[DISK_LIST+[childptbr+2*i]]=[DISK_LIST+[childptbr+2*i]]+1;	//if page in ptbr in disk swap, increase df entry by 1
+            store(6,20);			//commit back df coz we increased df entry
+        endif;
+        i=i+1;
+    endwhile;
+    alias childpcb S8;
+    childpcb=READY_LIST+32*childpid;
+
+	[childpcb+5]=childptbr;
+	[childpcb+4]=[physicalsp];
+	[childpcb+3]=SP-1;
+	[childpcb+2]=BP;
+	[childpcb+6]=PTLR;
+	[childpcb+7]=R0;
+	[childpcb+8]=R1;					//setting the child pcb
+	[childpcb+9]=R2;
+	[childpcb+10]=R3;
+	[childpcb+11]=R4;
+	[childpcb+12]=R5;
+	[childpcb+13]=R6;
+	[childpcb+14]=R7;
+	
+	alias parentpid S7;
+	parentpid=(PTBR-1024)/8;
+	[childpcb+31]=parentpid;		//setting parent pid in child pcb
+	i=0;
+	while(i<=7) do
+		[childpcb+15+2*i]=[READY_LIST+32*parentpid+15+2*i];
+		[childpcb+16+2*i]=[READY_LIST+32*parentpid+16+2*i];
+		if([READY_LIST+32*parentpid+15+2*i]!=-1) then
+			[FILE_TABLE+2*[READY_LIST+32*parentpid+15+2*i]+1]=[FILE_TABLE+2*[READY_LIST+32*parentpid+15+2*i]+1]+1;
+		endif;				//cloning the child per process file table, also increasing open file table entry, if possible
+		i=i+1;								
+	endwhile;
+
+	[childpcb+1]=1;
+	[physicalsp-2]=childpid;		//returning child pid, parent process
+	breakpoint;
+	alias childphysp S9;
+	childphysp=[childptbr+6]*512+((SP-1)%512);			//childsp is actually SP-1
+	[childphysp-1]=-2;				//returning -2 , child process
+	
+	ireturn;	
+	
+endif;
+

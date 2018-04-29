@@ -1,0 +1,161 @@
+alias physicalsp S0;
+physicalsp=[PTBR+(2*SP/512)]*512+(SP%512);
+
+alias syscallno S1;
+syscallno=[physicalsp-1];
+alias flag1 S2;
+alias pid S4;
+alias i S3;
+alias mempage S8;
+alias valid S9;
+
+if(syscallno==10) then
+	
+	i=0;
+
+	pid=(PTBR-1024)/8;
+
+	while(i < 32) do
+		if([READY_LIST + 32*i + 1]==100+pid) then
+			[READY_LIST+ 32*i +1]=1;
+		endif;
+		i=i+1;
+	endwhile;
+
+	i=0;
+
+	while(i<=31) do
+		if([READY_LIST+32*i+1]==1) then
+			break;
+		endif;
+		i=i+1;
+	endwhile;
+
+	if(i==32)then
+		halt;
+	endif;
+
+	i=0;
+	while(i<=7) do
+		if([READY_LIST+32*pid+15+2*i]!=-1) then
+			alias systabindex S15;
+			systabindex=[READY_LIST+32*pid+15+2*i];
+			[FILE_TABLE+2*systabindex+1]=[FILE_TABLE+2*systabindex+1]-1;
+			if([FILE_TABLE+2*systabindex+1]==0) then
+				[FILE_TABLE+2*systabindex]=-1;
+			endif;
+			[READY_LIST+32*pid+15+2*i]=-1;
+			[READY_LIST+32*pid+15+2*i+1]=-1;
+		endif;
+		i=i+1;
+	endwhile;
+
+	[READY_LIST+32*pid+1]=0;
+
+	i=0;
+	while(i<=3) do
+		if([PTBR+2*i]!=-1)then
+			mempage=[PTBR+2*i];									//mempage and validpage
+			valid=[PTBR+2*i+1];
+			if(valid=="01" || valid=="11")then
+				[MEM_LIST+mempage]=[MEM_LIST+mempage]-1;
+			endif;
+			if(valid=="00" && mempage>=448)then
+				[DISK_LIST+mempage]=[DISK_LIST+mempage]-1;
+				store(6,20);
+			endif;
+		endif;
+		[PTBR+2*i]=-1;
+		[PTBR+2*i+1]="00";
+		i=i+1;
+	endwhile;
+
+	flag1=1;
+
+endif;
+
+
+
+	//signal system call implementation
+if(syscallno==14)then
+	
+	
+	i=0;
+	while(i<32) do
+		if([READY_LIST+32*i+1]==100+((PTBR-1024)/8)) then
+			[READY_LIST+32*i+1]=1;
+		endif;
+		i=i+1;
+	endwhile;
+	[physicalsp-2]=1;
+	ireturn;
+endif;
+
+if(syscallno==13) then
+	if([READY_LIST+32*+1]==2||[READY_LIST+32*[physicalsp-3]+1]==0) then	 //physicalsp-3 = waitingpid
+		[physicalsp-2]=-1;
+		ireturn;
+	endif;
+
+	pid=(PTBR-1024)/8;
+	[physicalsp-2]=0;
+
+   	[READY_LIST+pid*32+1]=100+[physicalsp-3];
+	[READY_LIST+pid*32+2]=BP;
+   	[READY_LIST+pid*32+3]=SP;
+   	[READY_LIST+pid*32+4]=[physicalsp];
+	[READY_LIST+pid*32+5]=PTBR;
+	[READY_LIST+pid*32+6]=PTLR;
+	[READY_LIST+pid*32+7]=R0;
+	[READY_LIST+pid*32+8]=R1;
+	[READY_LIST+pid*32+9]=R2;
+	[READY_LIST+pid*32+10]=R3;
+	[READY_LIST+pid*32+11]=R4;
+	[READY_LIST+pid*32+12]=R5;	
+	[READY_LIST+pid*32+13]=R6;
+	[READY_LIST+pid*32+14]=R7;
+
+	flag1=1;
+
+endif;	
+
+if(flag1==1) then
+	alias nextPID S5;
+	nextPID=pid+1;
+
+	while(nextPID<=32) do
+		if(nextPID==32) then
+			nextPID=0;
+		endif;
+		if([READY_LIST+32*nextPID+1]==1) then
+			break;
+		endif;
+		nextPID=nextPID+1;
+    endwhile;
+
+	alias newPCB S6;
+	newPCB=READY_LIST+32*nextPID;
+
+	[newPCB+0]=nextPID;
+	[newPCB+1]=2;
+	BP=[newPCB+2];
+	SP=[newPCB+3];
+	PTBR=[newPCB+5];
+	PTLR=[newPCB+6];
+	R0=[newPCB+7];
+	R1=[newPCB+8];
+	R2=[newPCB+9];
+	R3=[newPCB+10];
+	R4=[newPCB+11];
+	R5=[newPCB+12];
+	R6=[newPCB+13];
+	R7=[newPCB+14];
+
+	SP=SP+1;
+	
+	[newPCB+4]=([(SP/512)*2+PTBR]*512)+(SP%512);
+
+	
+
+	ireturn;
+endif;

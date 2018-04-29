@@ -1,0 +1,141 @@
+alias physicalsp S0;
+physicalsp=[PTBR+6]*512+(SP%512);
+
+alias syscallno S1;
+syscallno=[physicalsp-1];
+
+if(syscallno==9) then
+
+	alias filename S2;
+	filename=[physicalsp-3];	
+	alias i S3;
+	i=0;
+	while(i<64) do
+		if([FAT+8*i]==filename) then
+			break;
+		endif;
+		i=i+1;
+	endwhile;
+
+	if(i==64) then
+		[physicalsp-2]=-1;
+		ireturn;
+	endif;
+
+	load(1,[FAT+8*i+2]);
+	alias count S4;
+	alias cnt S5;
+
+	count=0;
+	i=0;
+	while(i<3) do
+		if([SCRATCHPAD+i]==-1) then
+			break;
+		else
+			count=count+1;    
+		endif;            //code pages in new process
+		i=i+1;
+	endwhile;
+
+	i=0;
+	cnt=0;
+	while(i<=2) do
+		if([PTBR+2*i]==-1) then
+			break;
+		else
+			cnt=cnt+1;				 //valid code pages in page table
+		endif;
+		i=i+1;	                    
+	endwhile;
+
+	if(cnt>count) then
+		i=0;
+		while(count+i<cnt) do
+			[MEM_LIST+[PTBR+2*(count+i)]]=0;
+			[PTBR+2*(count+i)]=-1;
+			[PTBR+2*(count+i)+1]="00";
+			i=i+1;
+		endwhile;
+	endif;
+
+	if(count>cnt) then
+		alias free S15;
+		alias diff S14;
+		diff=count-cnt;
+		i=0;
+		free=0;
+		while(i<=63) do
+			if([MEM_LIST+i]==0) then
+				free=free+1;
+			endif;
+			i=i+1;
+		endwhile;
+		if(free<diff) then
+			[physicalsp-2]=-1;
+			ireturn;
+		endif;
+		i=0;
+		while(cnt+i<count) do
+			free=0;
+			while(free<=63) do
+				if([MEM_LIST+free]==0) then
+					break;
+				endif;
+				free=free+1;
+			endwhile;
+			[MEM_LIST+free]=1;
+			[PTBR+2*(cnt+i)]=free;
+			[PTBR+2*(cnt+i)+1]="01";
+			i=i+1;
+		endwhile;
+	endif;
+
+	i=0;
+	while(i<count) do
+		load([PTBR+2*i],[SCRATCHPAD+i]);
+		i=i+1;
+	endwhile;
+
+	alias pid S6;
+	pid=(PTBR-1024)/8;
+
+	i=0;
+	while(i<=7) do
+		if([READY_LIST+32*pid+15+2*i]!=-1) then
+			alias systabindex S13;
+			systabindex=[READY_LIST+32*pid+15+2*i];
+			[FILE_TABLE+2*systabindex+1]=[FILE_TABLE+2*systabindex+1]-1;
+			if([FILE_TABLE+2*systabindex+1]==0) then
+				[FILE_TABLE+2*systabindex]=-1;
+				[FILE_TABLE+2*systabindex+1]=0;
+			endif;
+			[READY_LIST+32*pid+15+2*i]=-1;
+			[READY_LIST+32*pid+15+2*i+1]=-1;
+		endif;
+		i=i+1;
+	endwhile;
+
+	SP=3*512;
+	physicalsp=[PTBR+(2*SP/512)]*512+(SP%512);
+
+	[physicalsp]=0;
+
+	ireturn;
+
+endif;
+
+if(syscallno==11) then
+	alias pid S11;
+	pid = (PTBR-1024)/8;
+	[physicalsp-2] = pid;
+	ireturn;
+endif;	
+
+if(syscallno == 12) then
+	alias parentpid S11;
+	alias childpid S12;
+	childpid = (PTBR-1024)/8;
+	parentpid = [READY_LIST + 32*childpid + 31];
+	[physicalsp-2]=parentpid;
+	ireturn;
+endif;		
