@@ -1,0 +1,84 @@
+alias physicalsp S0;
+physicalsp=([PTBR+6]*512)+ SP%512;
+alias syscall S1;
+syscall= [physicalsp-1];
+S2=[physicalsp-2]; 
+S3=[physicalsp-3]; 
+S4=[physicalsp-4]; 
+
+if(syscall == 6) then
+	if(S4<0||S4>7) then
+	  [physicalsp-2]=-1;  
+	  ireturn;
+	endif;
+
+    alias currentPCB S10;
+    currentPCB=READY_LIST+4*(PTBR-1024); 
+    alias systableentry S5;
+    
+
+    systableentry=[currentPCB+15+2*S4];
+	if(systableentry == -1) then
+	  [physicalsp-2]=-1; 
+	  ireturn;
+	endif;
+
+	alias fatentry S7;
+	alias filesize S8;
+    fatentry=[FILE_TABLE+2*systableentry]; 
+    filesize=[FAT+8*fatentry+1]; 
+    
+	if(S3<0&&S3>=filesize) then
+		[physicalsp-2]=-1;
+		ireturn;
+	endif;
+		
+	[currentPCB+15+2*S4+1]=S3;
+	[physicalsp-2]=0;
+	ireturn;	
+endif;
+
+if(syscall == 7) then
+	if(S4<0||S4>7) then
+	  [physicalsp-2]=-1;
+	  ireturn;
+	endif;
+
+    alias currentPCB S10;
+    currentPCB=READY_LIST+4*(PTBR-1024);
+    alias systableentry S5;
+    alias lseekpos S6;
+
+    systableentry=[currentPCB+15+2*S4];
+	if(systableentry == -1) then
+	  [physicalsp-2]=-1; 
+	  ireturn;
+	endif;
+
+	
+	lseekpos=[currentPCB+15+2*S4+1];
+	alias fatentry S7;
+	alias basicblock S8;
+	alias filesize S13;
+    fatentry=[FILE_TABLE+2*systableentry];
+    basicblock=[FAT+8*fatentry+2];
+
+    filesize=[FAT+8*fatentry+1];
+    load(1,basicblock); 
+    if(lseekpos>=filesize) then
+    	[physicalsp-2]=-1;
+		ireturn;
+	endif;
+
+	alias dblockindex S9;
+	dblockindex=lseekpos/512;
+	alias save1 S14;
+	save1=[512+dblockindex];
+	load(1,save1);
+	
+	S3=[512+(lseekpos%512)]; 
+	[physicalsp-3]=S3;
+	[currentPCB+15+2*S4+1]=[currentPCB+15+2*S4+1]+1;
+	[physicalsp-2]=0;
+	ireturn;	
+endif;

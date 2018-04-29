@@ -1,0 +1,73 @@
+alias physicalsp S0;
+physicalsp=([PTBR+6]*512)+ SP%512;
+alias syscall S1;
+syscall= [physicalsp-1];
+S2=[physicalsp-2]; 
+S3=[physicalsp-3]; 
+S4=[physicalsp-4]; 
+
+if(syscall == 5) then
+	if(S4<0||S4>7) then
+	  [physicalsp-2]=-1; 
+	  ireturn;
+	endif;
+  alias currentPCB S10;
+  currentPCB=READY_LIST+4*(PTBR-1024); 
+  alias systableentry S5;
+  alias lseekpos S6;
+
+  systableentry=[currentPCB+15+2*S4];
+	if(systableentry == -1) then
+	  [physicalsp-2]=-1; 
+	  ireturn;
+	endif;
+
+	
+	lseekpos=[currentPCB+15+2*S4+1];
+	alias fatentry S7;
+	alias basicblock S8;
+  fatentry=[FILE_TABLE+2*systableentry];
+  [FILE_TABLE+2*systableentry]=(((PTBR-1024)/8)+1)*100+fatentry;
+  print("value");
+  print([FILE_TABLE+2*systableentry]);
+  basicblock=[FAT+8*fatentry+2];
+  load(1,basicblock); 
+  alias dblockno S9;
+  alias blocktowrite S12;
+	dblockno=lseekpos/512;
+	blocktowrite=[512+dblockno];
+
+	if([512+dblockno]==-1) then
+      alias dbfreeentry S11;
+      dbfreeentry=24;
+      while(dbfreeentry<448) do
+        if([3072+dbfreeentry]==0) then
+          break;
+        endif;
+        dbfreeentry=dbfreeentry+1;
+      endwhile;
+      if(dbfreeentry==448) then
+        [physicalsp-2]=-1;
+        ireturn;
+      endif;
+      [3072+dbfreeentry]=1;
+      [512+dblockno]=dbfreeentry;
+      store(1,basicblock);
+      [FAT+8*fatentry+1]=[FAT+8*fatentry+1]+512;
+      store(5,19);
+      store(6,20);
+  endif;        
+  load(1,basicblock); 
+  blocktowrite=[512+dblockno];
+  load(1,blocktowrite);
+  alias lseekoffset S13;
+
+  lseekoffset= lseekpos%512;
+  [512+lseekoffset]=S3;
+  store(1,blocktowrite);
+ 
+  [currentPCB+15+2*S4+1]=[currentPCB+15+2*S4+1]+1;
+   [FILE_TABLE+2*systableentry]=fatentry;
+  [physicalsp-2]=0;
+  ireturn;
+endif;    

@@ -1,0 +1,111 @@
+alias physicalsp S0;
+physicalsp=([PTBR+6]*512)+ SP%512;
+alias syscall S1;
+syscall= [physicalsp-1];
+S2=[physicalsp-2]; 
+S3=[physicalsp-3]; 
+alias k S6;
+
+if ( syscall == 2) then
+  alias i S4; 
+  breakpoint;
+  alias j S7;
+  
+  i=0;	
+
+  while(i<64) do
+    if([FAT+8*i]==S3) then			
+      break;
+    endif;
+    i=i+1;
+  endwhile; 
+
+  if(i==64) then
+  	[physicalsp-2]=-1;
+    ireturn;
+  endif;
+  k=-1;
+
+  j=0;
+  while(j<64) do
+    if([FILE_TABLE+2*j]==i) then
+      k=j;         
+      break;
+    endif; 
+  j=j+1;
+  endwhile;
+  if(j==64) then
+    k=-1;
+  endif;  
+  j=0;
+
+  if(k==-1) then
+    while(j<64) do
+      if([FILE_TABLE+2*j]==-1) then  
+        k=j;
+        break;
+      endif;
+    j=j+1;   
+    endwhile;
+    if(j==64) then
+      [physicalsp-2]=-1;
+      ireturn;
+    endif;
+  endif;       
+  
+
+
+  alias c S5;
+  c=0;
+  alias currentPCB S10;
+  currentPCB=READY_LIST+4*(PTBR-1024);
+  while(c<16) do
+     if([currentPCB+15+c]==-1) then   
+       break;
+     endif;
+     c=c+2;
+  endwhile;
+  if(c==16) then 
+    [physicalsp-2]=-1;
+    ireturn;
+  endif;
+  [currentPCB+15+c]=k; 
+  [currentPCB+15+c+1]=0;
+  [FILE_TABLE+ 2*k]=i;
+  [FILE_TABLE+ 2*k+1]= [FILE_TABLE+ 2*k+1]+1;     
+  breakpoint;
+  [physicalsp-2]=c/2;   
+  ireturn;
+endif;  
+
+if ( syscall == 3) then
+  alias i S4; 
+  breakpoint;
+  alias j S7;
+  
+  i=0;	
+  //step 1
+  if(S3<=-1||S3>7) then 
+    [physicalsp-2]=-1; 
+    ireturn;
+  endif;
+   alias currentPCB S10;
+  currentPCB=READY_LIST+4*(PTBR-1024);
+
+  if([currentPCB+15+2*S3]==-1) then 
+    [physicalsp-2]=-1; 
+    ireturn;
+  endif;
+  alias k S8;
+  k=[currentPCB+15+2*S3];        
+  alias l S9;
+  l=[FILE_TABLE+2*k] ;           
+  [FILE_TABLE+2*k+1]=[FILE_TABLE+2*k+1]-1;    
+  if([FILE_TABLE+2*k+1]==0) then              
+   [FILE_TABLE+2*k]=-1;                      
+  endif ;
+  [currentPCB+15+2*S3]=-1;                     
+  [currentPCB+15+2*S3+1]=-1;
+  [physicalsp-2]=0;
+  ireturn;
+endif;  

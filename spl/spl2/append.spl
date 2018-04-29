@@ -1,0 +1,126 @@
+alias physicalsp S0;
+physicalsp=([PTBR+6]*512)+ SP%512;
+alias syscall S1;
+syscall= [physicalsp-1];
+S2=[physicalsp-2]; 
+S3=[physicalsp-3]; 
+S4=[physicalsp-4]; 
+
+if(syscall == 5) then
+
+	if(S4<0||S4>7) then
+	  [physicalsp-2]=-1; 
+	  ireturn;
+	endif;
+  	alias currentPCB S10;
+  	currentPCB=READY_LIST+4*(PTBR-1024); 
+  	alias systableentry S5;
+  	alias lseekpos S6;
+	breakpoint;
+  	systableentry=[currentPCB+15+2*S4];
+	if(systableentry == -1) then
+	  [physicalsp-2]=-1; 
+	endif;
+	breakpoint;
+	alias fatentry S7;
+	alias basicblock S8;
+	alias dblockno S9;
+  	alias blocktowrite S12;
+  	fatentry=[FILE_TABLE+2*systableentry];
+  	basicblock=[FAT+8*fatentry+2];
+  	load(1,basicblock); 
+  	alias k S13;
+  	alias l S14;
+  	k=0;
+	breakpoint;
+  	while(k<256) do 
+  		if([512+k]==-1) then
+  		 break;
+  		endif; 
+  		k=k+1;
+  	endwhile;
+ 	breakpoint; 	
+	if(k==0) then
+  		load(1,basicblock);
+  		alias dbfreeentry S11;
+        	dbfreeentry=24;
+        	while(dbfreeentry<448) do
+          		if([3072+dbfreeentry]==0) then
+            			break;
+          		endif;
+        		dbfreeentry=dbfreeentry+1;
+        	endwhile;
+		breakpoint;        	
+		if(dbfreeentry==448) then
+          		[physicalsp-2]=-1;
+          		ireturn;
+        	endif;
+ 	       	[3072+dbfreeentry]=1;
+        	[512+k]=dbfreeentry;
+        	store(1,basicblock);
+        	load(1,dbfreeentry);
+        	[512]=S3;
+        	store(1,dbfreeentry);
+        	breakpoint;
+        	[FAT+8*fatentry+1]=[FAT+8*fatentry+1]+512;
+        	store(5,19);
+        	store(6,20);
+        	[physicalsp-2]=0;
+        	ireturn;
+  	endif;
+  	alias save1 S15;
+  	save1=	[512+k-1];
+	load(1,save1);
+	l=0;
+	breakpoint;
+	while(l<512) do
+		if([512+l]=="") then
+  		 break;
+  		endif; 
+  		l=l+1;
+  	endwhile;
+  	
+ 	breakpoint; 	
+	store(1,save1);
+	
+	
+  	if(l==512) then	
+  		if(k==256) then
+  		  [physicalsp-2]=-1;
+  		  ireturn;	
+	    	endif;
+  		load(1,basicblock);
+  		alias dbfreeentry S11;
+        	dbfreeentry=24;
+		breakpoint;
+        	while(dbfreeentry<448) do
+          	if([3072+dbfreeentry]==0) then
+            		break;
+          	endif;
+		breakpoint; 
+	       	dbfreeentry=dbfreeentry+1;
+        	endwhile;
+        	if(dbfreeentry==448) then
+          		[physicalsp-2]=-1;
+          		ireturn;
+       		 endif;
+        	[3072+dbfreeentry]=1;
+       		[512+k]=dbfreeentry;
+       		store(1,basicblock);
+        	load(1,dbfreeentry);
+        	[512]=S3;
+        	store(1,dbfreeentry);
+ 		breakpoint;       
+        	[FAT+8*fatentry+1]=[FAT+8*fatentry+1]+512;
+        	store(5,19);
+        	store(6,20);
+        	[physicalsp-2]=0;
+        	ireturn;
+  	endif;	
+
+  	load(1,save1);	
+	[512+l]=S3;	
+	store(1,save1);	
+  	[physicalsp-2]=0;
+  	ireturn;
+endif;

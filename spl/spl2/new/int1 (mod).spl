@@ -1,0 +1,147 @@
+
+alias physp S0;
+
+physp = [PTBR + 2*(SP/512)]*512 + (SP%512);
+
+alias syscallno S1;
+
+syscallno = [physp - 1];
+
+S2 =[physp - 2];
+S3 =[physp - 3];
+//S4 =[physp - 4];
+//S5 =[physp - 5];
+//S6 =[physp - 6];
+//S7 =[physp - 7];
+//S8 =[physp - 8];
+//S9 =[physp - 10];
+//S10 =[physp - 11];
+
+if(syscallno == 1) then
+	alias con S11;
+        con=0;
+        while(con<64)do
+              if([FAT+(con*8)] == S3)then
+                   [physp - 2] = 0;
+                   ireturn;
+              endif;
+              con = con + 1;
+	endwhile;
+        
+        con = 24;
+        alias bblock S12;
+
+        while(con < 448 && [DISK_LIST + con] != 0)do
+              con = con + 1;
+        endwhile;
+        
+        if(con == 448)then
+              [physp - 2] = -1;
+              ireturn;
+        endif;
+   
+        bblock = con;
+        con=0;
+        
+        while(con<64 && [FAT+(con*8)+2] != -1)do
+              con = con + 1;
+	endwhile;
+
+        if(con == 64)then
+              [physp - 2] = -1;
+              ireturn;
+        endif;
+        
+        [FAT + con] = S3;
+        [FAT + con + 1] = 0;
+        [FAT + con + 2] = bblock; 
+
+        load(1,bblock);
+        
+        con = 512;
+
+        while(con < 1024)do
+              [con] = -1;
+              con = con + 1;
+        endwhile; 
+        
+        store(1,bblock);
+        [DISK_LIST + bblock] = 1;
+        store(5,19);
+        store(6,20);
+        [physp - 2] = 0;
+
+endif;
+
+if(syscallno == 4)then
+	alias con S11;
+        con=0;
+        while(con<64)do
+              if([FAT+(con*8)] == S3)then
+              	S5 = con;
+	   	break;	
+              endif;
+              con = con + 1;
+	endwhile;
+ 
+        print("84");
+        if(con == 64)then
+              [physp - 2] = -1;
+              ireturn;
+        endif;
+        print("89");
+        con = 0;
+        while(con < 128 )do
+              if([FILE_TABLE + con] == S5)then
+	             [physp - 2] = -1;
+	             ireturn;
+              endif;
+              con = con + 2;
+        endwhile;
+        print("98");
+        alias bblock S6;
+	bblock = [FAT + S5*8 + 2];
+
+        load (1,bblock);
+        
+        con = 512;
+        alias i S7;
+        alias m S8;
+        while(con<768)do
+                if([con] != -1)then
+			
+    		        print([con]);
+			load(1,[con]);
+                	i=512;
+ 			while(i<1024)do
+				[i]="";
+				i = i + 1;
+			endwhile;
+			store(1,[con]);
+                	[DISK_LIST + [con]] = 0;
+                	load(1,bblock);
+                 endif;
+		con = con + 1;
+	endwhile;
+   	print("121");
+        load (1,bblock);
+        i = 512;
+
+ 	while(i<1024)do
+		[i]="";
+		i = i + 1;
+	endwhile;
+        store(1,bblock);	
+  	
+        [DISK_LIST + bblock] = 0;
+
+	[FAT + S5*8] = -1;
+	[FAT + S5*8 + 2] = -1;
+        store(5,19);
+        store(6,20);
+       	[physp - 2] = 0;
+
+endif;
+ireturn;
+
+  

@@ -1,0 +1,195 @@
+alias physicalSP S0;
+physicalSP = ([PTBR + 2 * (SP/512)] * 512) + (SP % 512);
+
+alias sysCallNo S1;
+sysCallNo = [physicalSP - 1];
+
+if (sysCallNo == 9) then	//sysCallNo 9 --> EXEC
+	alias fileName S2;
+	fileName = [physicalSP - 3];	//Only argument is fileName
+	
+	alias counter S3;
+	counter = 0;
+	
+	while (counter < 64) do
+		if ([FAT + (8 * counter)] == fileName) then		//see if file exists in the disk
+			
+			alias basicBlock S4;
+			basicBlock = [FAT + (8 * counter) + 2];
+			
+			load (1, basicBlock);
+			
+			alias codeBlocks S5;
+			codeBlocks = 0;
+			
+			counter = 0;
+			while (counter < 3) do
+				if ([SCRATCHPAD + counter] != -1) then	//count the number of codeBlocks in the file
+					codeBlocks = codeBlocks + 1;
+				endif;
+			
+				counter = counter + 1;
+			endwhile;
+			
+			
+			alias validPages S6;
+			validPages = 0;
+			
+			counter = 0;
+			while (counter < 6) do
+				if ([PTBR + counter] != -1) then	//count the number of validPages in the Page Table
+					validPages = validPages + 1;
+				endif;
+			
+				counter = counter + 2;
+			endwhile;
+			
+			alias difference S7;
+			
+			counter = 0;
+			
+			if (codeBlocks < validPages) then 	//need to deallocate pages in memory
+				difference = validPages - codeBlocks;
+				
+				while (counter < difference) do
+					[MEM_LIST + [PTBR + (2 * (counter+codeBlocks))]] = 0;	//set as free in Memory Free List
+					
+					[PTBR + (2 * (counter+codeBlocks))] = -1;	//invalidate entry in Page Table
+					
+					[PTBR + (2 * (counter+codeBlocks)) + 1] = "00";	//invalid and unreferenced
+					
+					counter = counter + 1;
+				endwhile;
+				
+			endif;
+			
+			alias search S8;
+			alias flag S9;		//needed for below case
+			flag = 0;
+			
+
+			if (codeBlocks > validPages) then 	//need to allocate pages in memory
+				difference = codeBlocks - validPages;
+				
+				search = 0;
+				while (search < 64) do
+					if ([MEM_LIST + search] == 0) then
+						flag = flag + 1;
+					endif;
+					
+					if (flag == difference) then
+						break;
+					endif;
+
+					search = search + 1;
+				endwhile;
+
+				if (flag != difference) then
+					[physicalSP - 2] = -1;
+					ireturn;
+				endif;
+
+				while (counter < difference) do
+					search = 0;
+					
+					while (search < 64) do
+						if ([MEM_LIST + search] == 0) then
+						
+							[MEM_LIST + search] = 1;	//set as allocated in Memory Free List
+					
+							[PTBR + (2 * (counter+validPages))] = search;	//create a new entry in the Page Table
+					
+							[PTBR + (2 * (counter+validPages)) + 1] = "01";	//unreferenced and valid
+							
+							break;		//After allocating one page BREAK
+						endif;
+						
+						search = search + 1;
+					endwhile;
+					
+					counter = counter + 1;
+				endwhile;
+				
+				
+			endif;
+			
+			counter = 0;
+			search = 0;
+			while (counter < codeBlocks) do
+				if ([SCRATCHPAD + counter] != -1) then	//load the codeBlock to the memory in pages specified in 															  the Page Tabe
+					load ([PTBR + search], [SCRATCHPAD + counter]);
+					
+					search = search + 2;
+				endif;
+			
+				counter = counter + 1;
+			endwhile;
+			
+			
+			alias PCB S10;
+			alias SWOFT S11;
+			PCB = READY_LIST + ((PTBR - 1024)/8) * 32;
+			
+			counter = 0;
+			while (counter < 16) do
+				if ([PCB + 15 + counter] != -1) then	//close all files opened by the process to be replaced
+					
+					SWOFT = [PCB + 15 + counter];
+					
+					[SWOFT + 1] = [SWOFT + 1] - 1;		//decrement File Open Count
+					
+					if ([SWOFT + 1] == 0) then
+						[SWOFT] = -1;	//if File Open Count becomes 0 then invalidate the entry by setting FAT 										 Index entry to -1
+					endif;
+	
+					[PCB + 15 + counter] = -1;	//now invalidate the entry in per process open file table in PCB
+					
+					[PCB + 15 + counter + 1] = -1;	//set LSEEK Position to -1 (invalid)
+				
+				endif;
+				
+				counter = counter + 2;
+			endwhile;
+			
+			SP = 3 * 512;	//+1 stack, ireturn decrements this and assigns value on top to IP
+			
+			[([PTBR + 2 * (SP/512)] * 512) + (SP % 512)] = 0;	//IP should be set to 0 at the beginning
+			
+			ireturn;	//NO return value for EXEC
+			
+		endif;
+	
+		counter = counter + 1;
+	endwhile;
+
+	[physicalSP - 1] = -1;	//if no file with fileName exists --> failure
+	ireturn;		
+	
+endif;		
+			
+
+
+
+if (sysCallNo == 11) then	//sysCallNo 11 --> GETPID
+	[physicalSP - 2] = (PTBR-1024)/8;	//just put the PID as the return value
+	ireturn;
+
+	[physicalSP -2] = -1;	//in case of failure --> return -1  ..?
+	ireturn;
+endif;
+
+
+
+
+
+
+if (sysCallNo == 12) then 	//sysCallNo 12 --> GETPPID
+	alias PCB S2;
+	PCB = READY_LIST + (32 * ((PTBR - 1024)/8));
+
+	[physicalSP - 2] = [PCB + 31];	//PCB modified to hold PPID in its last location
+	ireturn;
+
+	[physicalSP -2] = -1;	//in case of failure --> return -1  ..?
+	ireturn;
+endif;

@@ -1,0 +1,222 @@
+alias physicalSP S0;
+physicalSP = ([PTBR + 2 * (SP/512)] * 512) + (SP % 512);	
+
+alias sysCallNo S1;
+sysCallNo = [physicalSP - 1];	//sysCallNo is -1
+
+alias counter S2;
+alias PID S8;
+
+if (sysCallNo == 10) then	//sysCallNo 10 --> EXIT
+	
+	alias PCB S3;
+	PID = (PTBR-1024)/8;
+	PCB = READY_LIST + 32 * PID ;
+	
+	alias set S4;
+	alias SWOFT S5;
+	
+
+	//must resume all processes waiting for the exiting process
+	counter = 0;
+	while (counter < 32) do
+		if ([READY_LIST + (32 * counter) + 1] == (100 + PID)) then
+			[READY_LIST + (32 * counter) + 1] = 1;
+
+		endif;
+
+		counter = counter + 1;
+	endwhile;
+
+
+	alias flag S9;
+	flag = 0;
+
+	counter = 1;	
+	while (counter < 32) do
+		if ([READY_LIST + ((32 * (counter + PID) % 1024)) + 1] == 1) then 	//if there is a process in the ready state
+			
+			break;
+		endif;
+
+		counter = counter + 1;
+	endwhile;
+
+	if (counter == 32) then
+		halt;
+		ireturn;
+	endif;
+
+	set = 0;
+	while (set < 16) do
+		if ([PCB + 15 + set] != -1) then	//close all files opened by the process
+			
+			SWOFT = [PCB + 15 + set];
+			
+			[SWOFT + 1] = [SWOFT + 1] - 1;		//decrement File Open Count
+			
+			if ([SWOFT + 1] == 0) then
+				[SWOFT] = -1;	//if File Open Count becomes 0 then invalidate the entry by setting FAT 										 Index entry to -1
+			endif;
+
+			[PCB + 15 + set] = -1;	//now invalidate the entry in per process open file table in PCB
+			
+			[PCB + 15 + set + 1] = -1;	//set LSEEK Position to -1 (invalid)
+		
+		endif;
+		
+		set = set + 2;
+	endwhile;
+	
+	[PCB + 1] = 0;	//set the state of the process to terminated
+	
+	set = 0;
+	
+	while (set < 8) do
+		if ([PTBR + set + 1] == "01" || [PTBR + set + 1] == "11") then  
+			[MEM_LIST + [PTBR + set]] = 0;	//Deallocate pages in the Memory Free List
+		
+			[PTBR + set + 0] = -1;		//invalidate the entries in the Page Table
+			[PTBR + set + 1] = "00";	//set as unreferenced and invalid
+		
+		endif;
+		set = set + 2;
+	endwhile;
+
+endif;
+		
+				
+
+
+
+
+
+if (sysCallNo == 13) then	//sysCallNo 13 --> WAIT
+	alias WaitingPID S3;
+	WaitingPID = [physicalSP - 3];		//sysCallNo on top followed by space for return value and then 											  arguments
+	alias temp S5;
+	temp = WaitingPID;
+
+	PID = (PTBR-1024)/8;
+	alias PCB S4;
+	PCB = READY_LIST + 32 * PID;
+
+	if ([READY_LIST + (32 * WaitingPID) + 1] == 2) then		//process is waiting for a running process    															 (itself)
+		[physicalSP - 2] = -1;
+		ireturn;			//since this is not possible, failure --> return -1
+	endif;
+
+	if ([READY_LIST + (32 * WaitingPID) + 1] == 0) then		//process is waiting for a terminated process
+		[physicalSP - 2] = -1;
+		ireturn;				//again this is a failure
+	endif;
+
+	while ([READY_LIST + (32 * WaitingPID) + 1] >= 100) do 		//checking for deadlock, there should be no 															  cycles
+		if (([READY_LIST + (32 * WaitingPID) + 1] - 100) == PID) then	//if at least one of the processes is 																	dependent on current process, there 																  is a cycle
+			[physicalSP - 2] = -1;
+			ireturn;
+		endif;
+
+		WaitingPID = [READY_LIST + (32 * WaitingPID) + 1] - 100;	//update WaitingPID to check through all 															   processes
+	endwhile;
+
+
+	[PCB + 1] = 100 + temp;	//state of current process is changed to indicate which process   									it is waiting for
+
+
+	//??? transfer control to scheduler in the EXIT system call to schedule the next process while this process waits
+
+	[physicalSP - 2] = 0;	//return value = 0 --> success
+
+	counter = 1;	
+	while (counter < 32) do
+		if ([READY_LIST + ((32 * (counter + PID) % 1024)) + 1] == 1) then 	//if there is a process in the ready state
+			
+			break;
+		endif;
+
+		counter = counter + 1;
+	endwhile;
+
+
+	//DON'T forget to save the registers of the process that is going to wait
+
+	[PCB + 2] = BP;
+	[PCB + 3] = SP - 1;	//Whenever an interrupt happens IP is pushed onto the stack and SP is incremented by 1
+
+	[PCB + 4] = [physicalSP];	//store the IP which has now been pushed onto the stack and is on the top
+	[PCB + 5] = PTBR;
+	[PCB + 6] = PTLR;
+
+	[PCB + 7] = R0;
+	[PCB + 8] = R1;
+	[PCB + 9] = R2;
+	[PCB + 10] = R3;
+	[PCB + 11] = R4;
+	[PCB + 12] = R5;
+	[PCB + 13] = R6;
+	[PCB + 14] = R7;
+
+
+endif;
+
+
+
+
+
+
+if (sysCallNo == 14) then	//sysCallNo 14 --> SIGNAL
+	alias PID S3;
+
+	PID = (PTBR - 1024)/8;
+
+	counter = 0;
+	while (counter < 32) do
+		if ([READY_LIST + (32 * counter) + 1] == (100 + PID)) then	//find all processes waiting for the 																	  currently running process
+			[READY_LIST + (32 * counter) + 1] = 1;	//all to READY (1)
+		endif;
+
+		counter = counter + 1;
+	endwhile;
+
+	[physicalSP - 2] = 0;	//indicate success
+	ireturn;
+
+	[physicalSP - 2] = -1;	//failure ?
+	ireturn;
+
+endif;
+
+
+
+
+
+alias newPCB S6;
+newPCB = READY_LIST + (32 * (counter + PID) % 1024);
+
+BP = [newPCB + 2];
+SP = [newPCB + 3];
+
+PTBR = [newPCB + 5];
+PTLR = [newPCB + 6];
+
+R0 = [newPCB + 7];
+R1 = [newPCB + 8];
+R2 = [newPCB + 9];
+R3 = [newPCB + 10];
+R4 = [newPCB + 11];
+R5 = [newPCB + 12];
+R6 = [newPCB + 13];
+R7 = [newPCB + 14];
+
+//cannot set IP directly, upon encountering ireturn instruction in kernel mode IP is set to the value 				  on top of the stack of the current process and SP is decremented by 1
+
+SP = SP + 1; 
+
+alias newphysicalSP S7; 
+newphysicalSP = ([PTBR + 2 * (SP/512)] * 512) + (SP % 512); 
+[newphysicalSP] = [newPCB + 4];	   // Stores IP field value of PCB on the stack 
+
+[newPCB + 1] = 2;	//set the new process to running
+
+ireturn;

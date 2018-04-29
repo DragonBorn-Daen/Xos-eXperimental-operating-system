@@ -1,0 +1,162 @@
+alias i S0;
+alias pcb S1;
+alias currentPCB S2;
+alias newPCB S3;
+alias newphysicalSP S4;
+alias syscallno S10;
+
+newphysicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+syscallno=[newphysicalSP-1];
+
+if(syscallno==10) then
+  alias pid S7;
+  pid=(PTBR-1024)/8;
+  i=0;
+while(READY_LIST+i<2556) do
+      if([READY_LIST+i+1]==pid + 100) then
+           [READY_LIST+i+1]=1;
+       endif;
+       i=i+32;
+endwhile;
+ 
+i=0;
+while(READY_LIST+i < 2556) do
+      if([READY_LIST+i+1]==1) then
+             break;
+       endif;
+       i=i+32;
+endwhile;
+
+if((READY_LIST+i)>2556) then
+     halt;
+endif;
+
+i=0;
+
+while(READY_LIST+i<2556) do
+      if([READY_LIST+i+1]==2) then
+             pcb=READY_LIST+i;
+             break;
+       endif;
+       i=i+32;
+endwhile;
+
+i=0;
+while(i<8) do
+   if([pcb+15+i*2]!=-1) then 
+          S5= [pcb+15+i*2];
+          [FILE_TABLE+S5*2+1]=[FILE_TABLE+S5*2+1]-1;
+           if([FILE_TABLE+S5*2+1]==0) then
+               [FILE_TABLE+S5*2]=-1;
+           endif;
+         [pcb+15+i*2]=-1;
+        [pcb+15+i*2+1]=-1;
+          
+   endif;
+   i=i+1;
+endwhile;
+
+[pcb+1]=0;
+i=0;
+while(i<4) do
+          S2=[PTBR+i];
+    if([PTBR+i+1]=="01" || [PTBR+i+1]=="11") then
+      
+           [MEM_LIST+S2]=[MEM_LIST+S2]-1;
+        
+    endif;
+     if([PTBR+i+1]=="00"&& S2>=448) then
+           [DISK_LIST+S2]=[DISK_LIST+S2]-1;
+           [PTBR+i]=-1;
+     endif;
+       [PTBR+i+1]="00";
+          [PTBR+i]=-1;
+    i=i+1;
+endwhile;
+   currentPCB=pcb;
+   breakpoint;
+  currentPCB=currentPCB+32;
+if(currentPCB>2555) then
+     currentPCB=1536;
+endif;
+newPCB= currentPCB;
+while([newPCB+1]!=1) do
+        newPCB=newPCB+32;
+           if(newPCB>2558) then
+                newPCB=1536;
+            endif;
+endwhile;
+
+[newPCB+1]=2;
+BP= [newPCB+2];
+SP= [newPCB+3];
+PTBR = [newPCB+5];
+PTLR = [newPCB+6];
+R0= [newPCB+7];
+R1= [newPCB+8];
+R2= [newPCB+9];
+R3= [newPCB+10];
+R4= [newPCB+11];
+R5= [newPCB+12];
+R6= [newPCB+13];
+R7= [newPCB+14];
+SP= SP+1;
+
+newphysicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+[ newphysicalSP ] = [ newPCB + 4 ];
+breakpoint;
+ireturn;
+endif;        
+
+if(syscallno==13) then
+     pcb=[newphysicalSP-3];
+     if([READY_LIST+pcb*32+1]==2 || [READY_LIST+pcb*32+1]==0) then
+           [newphysicalSP-2]=-1;
+            ireturn;
+     endif;
+       i=(PTBR-1024)/8;
+      currentPCB=READY_LIST+i*32;
+       [READY_LIST+i*32+1]=100+pcb;
+      [ READY_LIST+i*32 + 2 ] = BP;
+[ currentPCB + 3 ] = SP - 1; 
+
+newphysicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512); 
+[ currentPCB + 4 ] = [ newphysicalSP ];
+ [ currentPCB + 5 ] = PTBR;
+[ currentPCB + 6 ] = PTLR ; 
+[ currentPCB + 7 ] = R0;
+[ currentPCB + 8 ] = R1;
+[ currentPCB + 9 ] = R2;
+[ currentPCB + 10 ] = R3;
+[ currentPCB + 11] = R4;
+[ currentPCB + 12] = R5;
+[ currentPCB + 13] = R6;
+[ currentPCB + 14] = R7;
+newphysicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+[newphysicalSP-2]=0;
+inline "JMP 12234";
+
+ireturn;
+endif; 
+
+if(syscallno==14) then
+    S7=(PTBR-1024)/8;
+    S7=S7+100;
+    i=0; 
+    S10=0;           
+while(READY_LIST+i<2556) do
+      if([READY_LIST+i+1]==S7) then
+           [READY_LIST+i+1]=1;
+           S10=S10+1;
+       endif;
+       i=i+32;
+endwhile;
+   newphysicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+   if(S10>0) then
+   [newphysicalSP-2]=0;
+   else
+    [newphysicalSP-2]=-1;
+    endif;
+   ireturn;
+endif;
+

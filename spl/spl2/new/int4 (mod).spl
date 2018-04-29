@@ -1,0 +1,69 @@
+alias physicalsp S0;
+physicalsp=([PTBR+6]*512)+ SP%512;
+alias syscall S1;
+syscall= [physicalsp-1];
+S2=[physicalsp-2]; 
+S3=[physicalsp-3]; 
+S4=[physicalsp-4]; 
+
+if(syscall == 5) then
+
+	if(S4<0||S4>7) then
+	  [physicalsp-2]=-1;  
+	  ireturn;
+	endif;
+
+        alias currentPCB S10;
+        currentPCB=READY_LIST+4*(PTBR-1024); 
+    	alias systableentry S5;
+    	
+
+    	systableentry=[currentPCB+15+2*S4];
+	if(systableentry == -1) then
+		  [physicalsp-2]=-1; 
+		  ireturn;
+	endif;
+
+	alias fatentry S7;
+	alias basicblock S8;
+    
+    	fatentry=[FILE_TABLE+2*systableentry];
+    	basicblock=[FAT+8*fatentry+2];
+    
+    	load(1,basicblock); 
+        alias S9 i;
+   	alias S10 j;
+	alias S11 k;    	
+        i=512;
+        while(i<1024 && [i]!=-1)do
+		j=[i];
+                i=i+1;
+	endwhile;
+       	
+	load(1,j);
+ 	if(i==1024)then
+        	k=0;
+	endif;
+        i=512;
+        while(i<1024 && [i]!="")do
+		i=i+1;
+	endwhile;
+
+	if(i!=1024)then
+ 	 	[i]=S3;
+		store(1,j);
+		[physicalsp-2]=0; 		
+		ireturn;		
+	endif;
+	
+	if(k==0)then
+		[physicalsp-2]=-1;
+		ireturn;
+	endif;
+    	
+	i=0;
+        while(
+    	
+    	[physicalsp-2]=0;
+    	ireturn;
+endif;    

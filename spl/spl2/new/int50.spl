@@ -1,0 +1,188 @@
+alias physp S0;
+
+physp = [PTBR + 2*(SP/512)]*512 + (SP%512);
+
+alias syscallno S1;
+
+syscallno = [physp - 1];
+
+
+if(syscallno == 8)then
+ 	alias con S3;
+ 	con = 0;
+
+ 	while(con<32 && [READY_LIST + 1 + con*32] != 0)do
+ 		con = con + 1;
+ 	endwhile;
+ 	
+ 	if(con==32)then
+ 		[physp-2]=-1;
+ 		ireturn;
+ 	endif;
+
+ 	alias childpid S4;
+ 	childpid = con;
+ 	[READY_LIST + con*32] = childpid;
+ 	alias i S5;
+ 	i=0;
+ 	con = 0;
+ 	while(con<4)do
+ 		if([PTBR+con*2] != -1)then
+ 			i=i+1;
+ 		endif;
+ 		con = con + 1;
+ 	endwhile;
+ 	con = 28;
+ 	alias j S8;
+ 	alias p S6;
+ 	alias s S7;
+ 	alias r S2;
+ 	alias q S9;
+	j=0;
+ 	p=-1;
+ 	q=-1;
+ 	r=-1;
+ 	s=-1;
+ 	while(con<64)do
+ 		if([MEM_LIST+con]==0)then
+ 			if(j==0)then
+ 				p=con;
+ 			endif;
+ 			if(j==1)then
+ 				q=con;
+ 			endif;
+ 			if(j==2)then
+ 				r=con;
+ 			endif;
+ 			if(j==3)then
+ 				s=con;
+ 			endif;
+ 			j=j+1;
+ 		endif;
+ 		if(j==i)then
+ 			break;
+ 		endif;
+ 		con = con + 1;
+ 	endwhile;
+ 	if(con==64)then
+ 		[physp-2]=-1;
+ 		ireturn;
+ 	endif;
+
+
+ 	con = 0;
+ 	j=0;
+ 	i=0;
+ 	while(con<4)do
+ 		if([PTBR+con*2]!=-1)then
+ 			if(j==0)then
+ 				i=0;
+ 				while(i<512)do
+ 					[p*512+i]= [ [PTBR+con*2]*512 + i];
+ 					i=i+1;
+ 				endwhile;
+ 				j=j+1;
+ 			endif;
+
+ 			if(j==1)then
+ 				i=0;
+ 				while(i<512)do
+ 					[q*512+i]= [ [PTBR+con*2]*512 + i];
+ 					i=i+1;
+ 				endwhile;
+ 				j=j+1;
+ 			endif;
+
+ 			if(j==2)then
+ 				i=0;
+ 				while(i<512)do
+ 					[r*512+i]= [ [PTBR+con*2]*512 + i];
+ 					i=i+1;
+ 				endwhile;
+ 				j=j+1;
+ 			endif;
+
+ 			if(j==3)then
+ 				i=0;
+ 				while(i<512)do
+ 					[p*512+i]= [ [PTBR+con*2]*512 + i];
+ 					i=i+1;
+ 				endwhile;
+ 				j=j+1;
+ 			endif;
+ 		endif;
+ 		con=con+1;
+ 	endwhile;
+ 	alias childptbr S10;
+ 	childptbr = childpid*8 + 1024;
+
+ 	[childptbr + 0] = p;
+ 	[childptbr + 1] = [PTBR + 1];
+ 	[childptbr + 2] = q;
+ 	[childptbr + 3] = [PTBR + 3];
+ 	[childptbr + 4] = r;
+ 	[childptbr + 5] = [PTBR + 5];
+ 	[childptbr + 6] = s;
+ 	[childptbr + 7] = [PTBR + 7];
+
+ 	alias currentPID S11;
+ 	currentPID = (PTBR - 1024)/8;
+
+
+ 	[READY_LIST + childpid*32 + 5] = childptbr;
+ 	[READY_LIST + childpid*32 + 4] = [physp];
+ 	[READY_LIST + childpid*32 + 3] = SP-1;
+ 	[READY_LIST + childpid*32 + 2] = BP;
+	[READY_LIST + childpid*32 + 6] = PTLR;
+ 	[READY_LIST + childpid*32 + 7] = R0;
+ 	[READY_LIST + childpid*32 + 8] = R1;
+ 	[READY_LIST + childpid*32 + 9] = R2;
+ 	[READY_LIST + childpid*32 + 10] = R3;
+ 	[READY_LIST + childpid*32 + 11] = R4;
+ 	[READY_LIST + childpid*32 + 12] = R5;
+ 	[READY_LIST + childpid*32 + 13] = R6;
+ 	[READY_LIST + childpid*32 + 14] = R7;
+ 	
+ 	con = 15;
+ 	while(con<31)do
+		i = [READY_LIST + currentPID*32 + con];
+		[READY_LIST + childpid*32 + con] = i;
+		if(i!=-1 && con%2==1)then
+		[FILE_TABLE + i*2 + 1] = [FILE_TABLE + i*2 + 1] + 1;
+		endif;
+		con=con+1;
+	endwhile;
+	[READY_LIST + childpid*32 + 1] = 1;
+	[READY_LIST + childpid*32 + 31] = currentPID;
+	[physp-2] = childpid;
+	//print(childpid);
+	i=SP-1;
+	con = [childptbr + 2*(i/512)]*512 + (i%512);
+    	[con-1] = -2;
+    	ireturn;
+endif;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,117 @@
+alias physicalsp S0;
+alias syscallno S1;
+alias i S2;
+alias j S3;
+alias pid S4;
+alias sysindex S5;
+alias mempage S8;
+alias diskpage S9;
+alias filename S10;
+alias basic_block S11;
+alias valid S12;
+alias ppid S13;
+
+
+
+
+physicalsp=([PTBR+2*(SP/512)]*512)+SP%512;
+syscallno=[physicalsp-1];
+
+
+if syscallno==9 then
+	
+	filename=[physicalsp-3];
+	i=0;
+	while i<64 do
+		if [FAT+8*i]==filename then
+			basic_block=[FAT+8*i+2];
+			break;
+		endif;
+	i=i+1;
+	endwhile;
+
+
+	if i==64 then
+		[physicalsp-2]=-1;
+		ireturn;
+	endif;
+
+	
+
+	i=0;
+	while i<3 do
+		mempage=[PTBR+2*i];
+		valid=[PTBR+2*i+1];
+		if valid=="11" || valid=="01" then
+ 			[MEM_LIST+mempage]=[MEM_LIST+mempage]-1;
+		endif;
+		if valid=="00" && mempage>=448 then
+  			[DISK_LIST+mempage]=[DISK_LIST+mempage]-1;
+			store(6,20);
+		endif;
+	i=i+1;
+	endwhile;		
+
+
+
+	load(1,basic_block);
+	i=0;
+	while i<3 do
+		if [512+i]!=-1 then
+			diskpage=[512+i];
+			[PTBR+2*i]=diskpage;
+			[PTBR+2*i+1]="00";
+		else
+			[PTBR+2*i]=-1;
+			[PTBR+2*i+1]="00";
+		endif;
+		
+	i=i+1;
+	endwhile;
+	[PTBR+7]="01";
+
+
+	pid=(PTBR-1024)/8;
+	i=0;
+	while i<8 do
+		sysindex=[READY_LIST+pid*32+15+2*i];
+		if sysindex!=-1 then
+			[READY_LIST+pid*32+15+2*i]=-1;
+			[READY_LIST+pid*32+16+2*i]=0;
+			[FILE_TABLE+2*sysindex+1]=[FILE_TABLE+2*sysindex+1]-1;
+			if [FILE_TABLE+2*sysindex+1]==0 then
+    				[FILE_TABLE+2*sysindex]=-1;
+			endif;
+		endif;
+	i=i+1;
+	endwhile;
+		
+	
+
+	SP=3*512;
+	
+	physicalsp=([PTBR+2*(SP/512)]*512)+SP%512;
+	[physicalsp]=0;
+
+	ireturn ;
+
+
+
+
+
+endif;
+
+
+if syscallno==11 then
+	pid=(PTBR-1024)/8;
+	[physicalsp-2]=pid;
+	ireturn;
+endif;
+
+
+if syscallno==12 then
+	pid=(PTBR-1024)/8;
+	ppid=[READY_LIST+32*pid+31];	
+	[physicalsp-2]=ppid;
+	ireturn;
+endif;

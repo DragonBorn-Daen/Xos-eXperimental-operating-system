@@ -1,0 +1,110 @@
+load (7, 1);	//loading exception handler: in this case only halts
+load (8, 2);	//...
+load (23, 17);	//loading INT 7 which halts after exec completes
+load (24, 18);	//...
+
+[READY_LIST + 0] = 0;	//setting up PCB PID for process
+
+PTBR = 1024;	//setting up Per-Process Page Table with 4 entries, needed for PCB
+PTLR = 4;		//4 as only 1 process
+
+[PTBR + 0] = 21;	//filling out the entries in the Per-Process Page Table
+[PTBR + 1] = "00";	//...	
+[PTBR + 2] = 22;	//physical page number in memory since program is already loaded else disk block number
+[PTBR + 3] = "00";	//IMPORTANT to use as string [unreferenced valid]
+[PTBR + 4] = 23;	//...
+[PTBR + 5] = "00";	//...	
+[PTBR + 6] = 25;	//stack page number in memory
+[PTBR + 7] = "01";	//...
+
+[READY_LIST + 31] = 0;	//31st word of PCB is now used to store ppid, parent of init is init itself
+[READY_LIST + 1] = 2;	//state is set to running (what about line 7?). Other entries need not be set up by OS Startup 
+
+SP  = 3 * 512;	//always logical address for user programs is 0-3 (so CONSTANT? multiple user programs?)
+
+//Now since everything is set up (PCB, Per-Process Page Table & SP) need to switch from kernel mode to user mode so that  //the program can execute. For this use "ireturn" --> switches modes, sets IP and SP--. Must set IP to logical address 0. //IP picks up value at top of stack so set that to 0; since in kernel mode use physical address.
+
+[28 * 512] = 0;	//setting the value for IP to change to (cannot change IP explicitly)
+
+
+load (11, 5);	//loading int1
+load (12, 6);	//...
+
+load (13, 7);	//loading int2
+load (14, 8);	//...
+
+load (15, 9);	//loading int3
+load (16, 10);	//...
+
+load (17, 11);	//loading int4
+load (18, 12);	//...
+
+load (19, 13);	//loading int5
+load (20, 14);	//...
+
+load (21, 15);	//loading int6
+load (22, 16);	//...
+
+load (9, 3);	//loading timer
+load (10, 4);	//...
+
+load (5, 19);	//load FAT
+load (6, 20);	//load Disk Free List
+
+
+
+
+
+alias counter S0;
+counter = 0;
+while (counter < 128) do
+	[FILE_TABLE + counter + 0] = -1;	//setting FAT Index to -1 to indicate invalid entry
+	[FILE_TABLE + counter + 1] = 0;		// setting File Open Count to 0 initially
+
+	counter = counter + 2;
+endwhile;
+
+
+
+
+counter = 0;
+while (counter < 16) do
+	[READY_LIST + 15 + counter + 0] = -1;	//set the per-process open file table in PCB to -1 initially to indicate no 										  open files
+	[READY_LIST + 15 + counter + 1] = -1;	//and for LSEEK Position too
+
+	counter = counter + 2;
+endwhile;
+
+
+
+counter = 0;
+while (counter < 64) do
+	if (counter < 26) then
+		[MEM_LIST + counter] = 1;	//set upto 25 as 1 (allocated) in the Memory Free List
+	else
+		[MEM_LIST + counter] = 0;	//the rest are free initially
+	endif;
+
+	counter = counter + 1;
+endwhile;
+
+
+
+counter = 1;
+while (counter < 32) do
+	[READY_LIST + counter*32 + 1] = 0;	//All PCBs except init's are empty at the start, so 0
+
+	counter = counter + 1;
+endwhile;
+
+
+counter = 0;
+while (counter < 64) do
+	[DISK_LIST + 448 + counter] = 0;	//Set all the swap blocks in the disk to unoccupied, necessary so 										  that changes in the previous runs of the machine are cleared
+	counter = counter + 1;
+endwhile;
+
+store (6, 20);	//DON'T forget to store back
+
+//now let the program take over
+ireturn;	

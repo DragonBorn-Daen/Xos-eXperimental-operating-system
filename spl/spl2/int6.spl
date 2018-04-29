@@ -1,0 +1,110 @@
+alias physicalSP S0;
+physicalSP=[PTBR+(2*SP/512)]*512+(SP%512);
+
+alias sysCallNo S1;
+sysCallNo=[physicalSP-1];
+
+if(sysCallNo==9) then
+
+	alias fileName S2;
+	fileName=[physicalSP-3];
+
+	alias i S3;
+
+	i=0;
+	while(i<=63) do
+		if([FAT+8*i]==fileName) then
+			break;
+		endif;
+		i=i+1;
+	endwhile;
+
+	if(i==64) then
+		[physicalSP-2]=-1;
+	ireturn;
+	endif;
+
+	load(1,[FAT+8*i+2]);
+
+	alias count S4;
+
+	count=0;
+	
+	while(count < 3)do
+		if([PTBR+count*2 + 1]=="01"||[PTBR+count*2 + 1]=="11")then
+			[MEM_LIST+[PTBR+count*2]]=[MEM_LIST+[PTBR+count*2]]-1;
+		endif;
+
+		if([PTBR+count*2]>=448 && ([PTBR+count*2 + 1]=="00"||[PTBR+count*2 + 1]=="10"))then
+			[DISK_LIST + [PTBR+count*2]]= [DISK_LIST + [PTBR+count*2]]-1;
+		endif;
+
+		count = count +1;
+	endwhile;
+
+	store(6,20);
+
+	i=0;
+	while(i<=2)do
+		[PTBR + 2*i]=[SCRATCHPAD+i];
+		[PTBR+2*i+1]="00";
+		i=i+1;
+	endwhile;
+	
+	[PTBR + 7] = "01";
+
+	alias pid S6;
+	pid=(PTBR-1024)/8;
+
+	i=0;
+	while(i<=7) do
+		if([READY_LIST+32*pid+15+2*i]!=-1) then
+			alias swoftIndex S13;
+			swoftIndex=[READY_LIST+32*pid+15+2*i];
+			[FILE_TABLE+2*swoftIndex+1]=[FILE_TABLE+2*swoftIndex+1]-1;
+			if([FILE_TABLE+2*swoftIndex+1]==0) then
+				[FILE_TABLE+2*swoftIndex]=-1;
+				[FILE_TABLE+2*swoftIndex+1]=0;
+			endif;
+			[READY_LIST+32*pid+15+2*i]=-1;
+			[READY_LIST+32*pid+15+2*i+1]=-1;
+		endif;
+		i=i+1;
+	endwhile;
+
+	SP=3*512;
+	physicalSP=[PTBR+(2*SP/512)]*512+(SP%512);
+
+	[physicalSP]=0;
+
+	ireturn;
+
+endif;
+
+if(sysCallNo == 11) then
+	alias currentPID S3;
+	currentPID = (PTBR-1024)/8;
+	if(currentPID<0 || currentPID>31) then
+		[physicalSP-2]=-1;
+		ireturn;
+	endif;
+	[physicalSP-2]=currentPID;
+	ireturn;
+endif;
+
+if(sysCallNo == 12) then
+	alias currentPID S3;
+	alias parentPID S4;
+	currentPID = (PTBR-1024)/8;
+	parentPID = [READY_LIST + currentPID*32 + 31];
+	if(currentPID<0 || currentPID>31) then
+		[physicalSP-2]=-1;
+		ireturn;
+	endif;
+	if(parentPID<0 || parentPID>31) then
+		[physicalSP-2]=-1;
+		ireturn;
+	endif;	
+	[physicalSP-2]=parentPID;
+	ireturn;
+endif;

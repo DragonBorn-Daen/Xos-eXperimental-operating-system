@@ -1,0 +1,80 @@
+alias physp S0;
+alias syscallno S1;
+alias argument1 S2;	  //argument1 =new lseek position or variable name to store after reading(for read system call)
+alias argument2  S7;	//argument2=file descriptor
+alias i S3;
+alias fatindex S4;
+alias sysindex S5;
+alias j S6;
+alias pid S8;
+alias lseek S9;
+alias basic_block S11; 
+alias data_block S10 ;
+
+physp=([PTBR+2*(SP/512)]*512)+SP%512;
+syscallno=[physp-1];
+argument1=[physp-3];
+argument2=[physp-4];
+
+if syscallno==6 then
+	if argument2<0 || argument2>7 then
+	[physp-2]=-1;
+	ireturn;
+	endif;
+
+	pid=(PTBR-1024)/8;
+	if [READY_LIST+pid*32+15+2*argument2]==-1 then
+	[physp-2]=-1;
+	ireturn;
+	endif;
+
+	sysindex=[READY_LIST+pid*32+15+2*argument2];
+	fatindex=[FILE_TABLE+2*sysindex];
+	i=[FAT+8*fatindex+1];
+
+	if argument1<0 || argument1>i then
+	[physp-2]=-1;
+	ireturn;
+	endif;
+	
+	[READY_LIST+pid*32+15+2*argument2+1]=argument1;
+	[physp-2]=0;
+	ireturn;
+
+endif;
+	
+if syscallno==7 then
+	if argument2<0 || argument2>7 then
+	[physp-2]=-1;
+	ireturn;
+	endif;
+
+	pid=(PTBR-1024)/8;
+	if [READY_LIST+pid*32+15+2*argument2]==-1 then
+	[physp-2]=-1;
+	ireturn;
+	endif;
+		
+	sysindex=[READY_LIST+pid*32+15+2*argument2];
+	fatindex=[FILE_TABLE+2*sysindex];
+	lseek=[READY_LIST+pid*32+15+2*argument2+1];
+	i=[FAT+8*fatindex+1];
+
+	if lseek>=i then
+	[physp-2]=-1;
+	ireturn;
+	endif;
+	
+	basic_block=[FAT+8*fatindex+2];
+	i=lseek/512;
+	load(1,basic_block);
+	data_block=[512+i];
+	load(1,data_block);
+	i=lseek%512;
+	argument1=[512+i];
+	[READY_LIST+pid*32+15+2*argument2+1]=[READY_LIST+pid*32+15+2*argument2+1]+1;
+	[physp-2]=0;
+	ireturn;	
+
+endif;		
+	

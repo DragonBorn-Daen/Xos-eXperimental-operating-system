@@ -1,0 +1,123 @@
+alias physp S0;
+
+physp = [PTBR + 2*(SP/512)]*512 + (SP%512);
+
+alias syscallno S1;
+
+syscallno = [physp - 1];
+
+S2 =[physp - 2];
+S3 =[physp - 3];
+//S4 =[physp - 4];
+//S5 =[physp - 5];
+//S6 =[physp - 6];
+//S7 =[physp - 7];
+//S8 =[physp - 8];
+//S9 =[physp - 10];
+//S10 =[physp - 11];
+
+if(syscallno == 2) then
+	
+        alias con S11;
+        con=0;
+        
+        while(con<64)do
+              if([FAT+(con*8)] == S3)then
+               	S12 = con;
+               	break;
+              endif;
+              con = con + 1;
+	endwhile;
+	if(con==64)then
+	      [physp - 2] = -1;
+              ireturn;
+    	endif;
+        con = 0;
+        while(con < 128 )do
+              if([FILE_TABLE + con] == S12)then
+                S13 = con;
+              	break;
+              endif;
+              con = con + 2;
+        endwhile;
+        if(con==128)then
+	        con=0;     
+          	while(con < 128 )do
+                 	if([FILE_TABLE + con] == -1)then
+                		S13 = con;
+              			break;
+              		endif;
+               		con = con + 2;
+                endwhile;
+                    
+                if(con==128)then
+			[physp - 2] = -1;
+		        ireturn;
+	    	endif;
+	endif;
+	alias currentPID S5;
+        currentPID = (PTBR - 1024)/8;
+        
+        alias currentPCB S6;
+        currentPCB = READY_LIST + 32*currentPID;
+        con = 15;
+
+        while(con < 30 && [currentPCB + con] != -1)do
+            con = con + 2;
+        endwhile;
+                
+        if(con>=30)then
+        	[physp - 2] = -1;
+		ireturn;
+	endif;
+        [currentPCB + con] = S13;
+        [currentPCB + con+1] = 0;
+        [FILE_TABLE + S13] = S12;
+        [FILE_TABLE + S13 + 1] = [FILE_TABLE + S13 + 1] + 1;
+        [physp - 2] =  (con - 15)/2;
+endif;
+
+if(syscallno == 3) then
+ 	if(S3 < 0 || S3 > 7)then
+		[physp - 2] = -1;
+                ireturn;
+        endif;	
+
+	alias currentPID S5;
+        currentPID = (PTBR - 1024)/8;
+        
+        alias currentPCB S6;
+        currentPCB = READY_LIST + 32*currentPID;
+         
+        S7 = S3*2 + 15;
+ 
+        if([currentPCB + S7] == -1) then
+		[physp - 2] = -1;
+                ireturn;
+        endif;	
+        
+        alias ptr S8;
+        ptr = [currentPCB + S7];
+
+   
+        [FILE_TABLE + ptr + 1] = [FILE_TABLE + ptr + 1] - 1;
+        
+        if([FILE_TABLE + ptr + 1] == 0)then
+          	[FILE_TABLE + ptr] = -1;
+        endif;
+        [currentPCB + S7]  = -1;
+        [currentPCB + S7 + 1] = -1;
+
+        [physp - 2] = 0;
+
+
+endif;
+
+ireturn;
+
+
+
+
+
+
+

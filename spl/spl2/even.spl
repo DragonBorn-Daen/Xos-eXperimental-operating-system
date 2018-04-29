@@ -1,0 +1,17 @@
+
+alias n S0;
+alias c S1;
+print "enter n:";
+read n;
+c=0;
+
+while(c<=n) do
+
+  if(c%2 == 0) then
+     print c;
+  endif;
+
+  c=c+1;
+
+endwhile;
+

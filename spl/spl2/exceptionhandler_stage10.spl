@@ -1,0 +1,151 @@
+alias physicalsp S0;
+alias syscallno S1;
+alias i S2;
+alias j S3;
+alias cause S4;
+alias logical_page S5;
+alias ip_address S6;
+alias disk_page S7;
+alias victim_page S8;
+alias vp_address S9;
+alias flag1 S10;
+alias flag2 S11;
+
+
+physicalsp = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);    //getting physical SP
+syscallno=10;
+
+
+cause=EFR%10;
+logical_page=(EFR/10)%100;
+ip_address=EFR/1000;
+
+
+if cause!=0 then
+    
+	if cause==1 then
+		print("Illegal instruction");
+    	endif;
+    	if cause==2 then
+      		print("Illegal memory access ");
+    	endif;
+    	if cause==3 then
+      		print("Arithmetic exception ");
+    	endif;
+    	if cause==4 then
+      		print("Illegal operands ");
+    	endif;
+    
+   	SP=SP+1;
+   	[physicalsp+1]=syscallno;
+   	SP=SP+1;
+   	[physicalsp+2]=ip_address;
+
+ 	inline "JMP 11776";
+ 
+endif;
+
+
+
+if cause==0 then
+	
+	if [PTBR+2*logical_page]==-1 then
+         	SP=SP+1;
+         	[physicalsp+1]=syscallno;
+         	SP=SP+1;
+         	[physicalsp+2]=ip_address;
+         
+         	inline "JMP 11776";
+     	endif;
+
+	disk_page=[PTBR+2*logical_page];
+     	i=0;
+     	while(i<64) do
+       		if [MEM_LIST+i]==0 then
+             		victim_page=i;
+             		[MEM_LIST+i]=[MEM_LIST+i]+1;
+             		break;
+        	endif;
+       i=i+1;
+       endwhile;
+	
+	j=logical_page;
+     	flag2=0;
+     	if i==64 then
+        	i=(PTBR-1024)/8;
+           	while(flag2==0) do
+           
+                 	
+                 	while(j<3) do
+                    		if [PAGE_TABLE+8*i+2*j+1]=="01"&&[MEM_LIST+[PAGE_TABLE+8*i+2*j]]<=1 then
+                       			victim_page=[PAGE_TABLE+8*i+2*j];
+                       			vp_address=PAGE_TABLE+8*i+2*j;
+                       			flag2=1;
+                       			break;
+                    		endif;
+                    		if [PAGE_TABLE+8*i+2*j+1]=="11" then
+                         		[PAGE_TABLE+8*i+2*j+1]="01";
+                    		endif;
+                    	j=j+1;
+                  	endwhile;
+                  
+              		if i==31 then
+                 		i=0;
+              		else 
+              	 		i=i+1;
+              		endif;
+
+			j=0;
+
+             	endwhile;
+             
+     
+     
+
+   		i=448;
+   		while(i<512) do
+     			if [DISK_LIST+i]==0 then
+         			[DISK_LIST+i]=[DISK_LIST+i]+1;
+         			store([vp_address],i);
+         			store(6,20);
+         			[vp_address]=i;
+         			[vp_address+1]="00";
+         			break;
+      			endif;
+     		i=i+1;
+   		endwhile;
+   
+
+  		if i==512 then
+    			SP=SP+1;
+    			[physicalsp+1]=syscallno;
+    			SP=SP+1;
+    			[physicalsp+2]=ip_address;
+    			inline "JMP 11776";
+   		endif;
+   
+  	endif;
+
+
+	if disk_page<448&&disk_page>=21 then
+      		load(victim_page,disk_page);
+      		[PTBR+2*logical_page]=victim_page;
+      		[PTBR+2*logical_page+1]="11";
+   	endif;
+   
+   	if disk_page>=448 then
+      		load(victim_page,disk_page);
+      		[PTBR+2*logical_page]=victim_page;
+      		[PTBR+2*logical_page+1]="11";
+      		[DISK_LIST+disk_page]=[DISK_LIST+disk_page]-1;
+      		store(6,20);
+   	endif;
+  
+   
+  	SP=SP+1;
+   	physicalsp = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+   	[physicalsp]=ip_address;
+   	ireturn;
+
+
+endif;
